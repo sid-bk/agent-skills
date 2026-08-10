@@ -1,0 +1,24 @@
+# Secrets / keys — never commit (belt-and-suspenders with the pre-push hook)
+*.env
+*.env.*
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+*.p12
+*.pfx
+*credential*
+
+# macOS
+.DS_Store
+._*
+
+# Claude local (machine-specific; skills/ and config are tracked)
+.claude/settings.local.json
+
+# Obsidian volatile workspace state (keep shared config)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/

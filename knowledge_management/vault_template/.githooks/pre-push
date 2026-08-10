@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#
+# pre-push — mechanical safety backstop for the work vault.
+#
+# Scans the commits about to be pushed for secrets, key/env files, and
+# oversized blobs. This is the dumb-but-always-on net; the smart check that
+# also reasons about regulated data / client-confidential material is the
+# `/commit-check` skill, run as part of `/eod-summary`. Blocks the push (exit 1) on a hit.
+#
+# Bypass (use deliberately, e.g. a reviewed false positive):
+#   git push --no-verify
+#
+# Installed via:  git config core.hooksPath .githooks
+
+set -uo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+MAX_BYTES=$((1024 * 1024))   # 1 MB
+
+# Content secret patterns (scanned over ADDED lines only).
+SECRET_RE='(sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer[[:space:]]+[A-Za-z0-9._-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|(password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)[[:space:]]*[:=][[:space:]]*[^[:space:]]{6,})'
+
+# Filenames that must never be committed (flagged by NAME; contents not read).
+FILE_RE='(^|/)(\.env($|\..*)|.*\.pem|.*\.key|id_rsa.*|.*credential.*|.*\.p12|.*\.pfx)$'
+
+fail=0
+note() { printf '  %s\n' "$1" >&2; }
+
+flag() {
+  if [ "$fail" -eq 0 ]; then
+    echo >&2
+    echo "✗ pre-push blocked — potential sensitive material in commits being pushed:" >&2
+    echo >&2
+  fi
+  fail=1
+}
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  # Deleting a remote ref — nothing to scan.
+  [ "$local_oid" = "$ZERO" ] && continue
+
+  if [ "$remote_oid" = "$ZERO" ]; then
+    # New branch on the remote: scan everything reachable that isn't already pushed.
+    base="$(git rev-list "$local_oid" --not --remotes 2>/dev/null | tail -1)"
+    if [ -n "$base" ]; then
+      base="$(git rev-parse "${base}^" 2>/dev/null || echo "$EMPTY_TREE")"
+    else
+      base="$EMPTY_TREE"
+    fi
+  else
+    base="$remote_oid"
+  fi
+
+  range="${base}..${local_oid}"
+
+  # 1) Forbidden filenames (added/modified paths).
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if printf '%s' "$f" | grep -qiE "$FILE_RE"; then
+      flag; note "key/env file: $f"
+    fi
+  done < <(git diff --name-only --diff-filter=AM "$range" 2>/dev/null)
+
+  # 2) Secret patterns in added lines — skip the forbidden files above (don't read them).
+  while IFS= read -r line; do
+    case "$line" in
+      "+++ "*) current="${line#+++ b/}";;
+      "diff --git"*) current="";;
+      "+"*)
+        [ -n "${current:-}" ] && printf '%s' "$current" | grep -qiE "$FILE_RE" && continue
+        body="${line#+}"
+        if printf '%s' "$body" | grep -qE "$SECRET_RE"; then
+          flag; note "secret-like string${current:+ in $current}: $(printf '%s' "$body" | cut -c1-80)"
+        fi
+        ;;
+    esac
+  done < <(git diff --diff-filter=AM "$range" 2>/dev/null)
+
+  # 3) Oversized added/modified blobs.
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    blob="$(git rev-parse "${local_oid}:${f}" 2>/dev/null)" || continue
+    size="$(git cat-file -s "$blob" 2>/dev/null || echo 0)"
+    if [ "$size" -gt "$MAX_BYTES" ]; then
+      flag; note "large file ($((size / 1024)) KB): $f"
+    fi
+  done < <(git diff --name-only --diff-filter=AM "$range" 2>/dev/null)
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo >&2
+  echo "  Remove/rotate the above, or bypass with:  git push --no-verify" >&2
+  echo "  (If a secret was already committed, rotate it — it's compromised once pushed.)" >&2
+  echo >&2
+  exit 1
+fi
+
+exit 0
