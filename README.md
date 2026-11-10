@@ -10,11 +10,11 @@ These are task-oriented agent skills, rewritten to be **model- and agent-agnosti
 | Skill | What it does |
 |-------|--------------|
 | [draft-commit](dev-workflow/draft-commit.md) | Group a messy working tree into coherent, reviewable commit drafts (drafts commands only — never stages/commits). |
-| [feature-team](dev-workflow/feature-team.md) | Run a feature end-to-end through a manager-orchestrated team of role subagents with gates and a bounded review loop. |
-| [feature-team-support/](dev-workflow/feature-team-support/) | The six role definitions (`product-manager`, `tech-lead`, `developer`, `qa-engineer`, `code-reviewer`, `devops-engineer`) and the shared `dev-cycle.md` protocol that `feature-team` orchestrates. Not skills — install these as subagents. |
-| [bug-fix](work-vault/bug-fix.md) | Enforce a project's bug-fix conventions end-to-end — branch name, commit message format, PR description. |
-| [security-review](security-review.md) | Menu-driven security review: scan a codebase, scan a diff, or generate verified patch files to apply by choice. |
-| [user-stories](user-stories.md) | Generate user stories and tickets — derived from an existing codebase or from a fresh use case description. |
+| [feature-team/](dev-workflow/feature-team/) | Run a feature end-to-end through a manager-orchestrated team of role subagents with gates and a bounded review loop. Bundles the six role agents and the shared `dev-cycle.md` protocol; install the agents as subagents. |
+| [bug-fix](dev-workflow/bug-fix.md) | Enforce a project's bug-fix conventions end-to-end — branch name, commit message format, PR description. |
+| [commit-check](dev-workflow/commit-check.md) | Pre-push safety scan — secrets, credentials, PHI, confidential or machine-local material. |
+| [security-review](dev-workflow/security-review.md) | Menu-driven security review: scan a codebase, scan a diff, or generate verified patch files to apply by choice. |
+| [user-stories](dev-workflow/user-stories.md) | Generate user stories and tickets — derived from an existing codebase or from a fresh use case description. |
 | [action-first-plan](dev-workflow/action-first-plan.md) | Concise, action-first plan for a new task — goal, approach, first move, done-when, watch-outs. |
 | [task-plan](dev-workflow/task-plan.md) | Enforce a project's task workflow (branch naming) end-to-end, with a mandatory design-review pass before implementation. |
 | [onboard](dev-workflow/onboard.md) | Read-only staff-engineer onboarding brief for an unfamiliar codebase — architecture, one traced request, files to read, risks. |
@@ -40,7 +40,7 @@ These are task-oriented agent skills, rewritten to be **model- and agent-agnosti
 |-------|--------------|
 | [frontend-design](ui/frontend-design.md) | Distinctive, intentional visual design for new or reshaped UI — palette, typography, layout, copy. |
 | [playground](ui/playground.md) | Build self-contained single-file interactive HTML playgrounds (controls → live preview → copyable prompt). |
-| [project-artifact](project-artifact.md) | Generate & publish an opinionated tabbed project status page, refreshable as a delta against the previous render. |
+| [project-artifact](ui/project-artifact.md) | Generate & publish an opinionated tabbed project status page, refreshable as a delta against the previous render. |
 | [html-explainer/](ui/html-explainer/) | Turn a codebase, flow, schema or document into a self-contained interactive HTML explainer, fact-checked before delivery. Includes a reference walkthrough page. |
 
 ### Diagrams
@@ -54,13 +54,13 @@ These are task-oriented agent skills, rewritten to be **model- and agent-agnosti
 
 | Skill | What it does |
 |-------|--------------|
-| [storm-research](research/storm-research.md) | Deep, multi-source research using the STORM method (perspective-guided Q&A → outline → cited synthesis). |
-| [research-swarm/](research/research-swarm/) | Split a research question into 2-4 sub-questions, run one background worker per sub-question, merge the cited findings. Bundles the `research-worker` subagent. |
-| [math-olympiad](research/math-olympiad.md) | Solve competition math (IMO/Putnam/USAMO/AIME) with fresh-context adversarial verification and calibrated abstention. |
-| [workshop](workshop.md) | Time-boxed crash course — make the user *functional* at a topic within a fixed number of hours. |
-| [hint](coding-practice/hint.md) | One graduated hint toward the problem the learner is stuck on — stops before any code. |
-| [review-mine](coding-practice/review-mine.md) | Review the learner's own code by teaching through questions; never writes the corrected version. |
-| [checkpoint](coding-practice/checkpoint.md) | Log fluency gained at the end of a coding-practice session, not features shipped. |
+| [storm-research](learning/storm-research.md) | Deep, multi-source research using the STORM method (perspective-guided Q&A → outline → cited synthesis). |
+| [research-swarm/](learning/research-swarm/) | Split a research question into 2-4 sub-questions, run one background worker per sub-question, merge the cited findings. Bundles the `research-worker` subagent. |
+| [math-olympiad](learning/math-olympiad.md) | Solve competition math (IMO/Putnam/USAMO/AIME) with fresh-context adversarial verification and calibrated abstention. |
+| [workshop](learning/workshop.md) | Time-boxed crash course — make the user *functional* at a topic within a fixed number of hours. |
+| [hint](learning/hint.md) | One graduated hint toward the problem the learner is stuck on — stops before any code. |
+| [review-mine](learning/review-mine.md) | Review the learner's own code by teaching through questions; never writes the corrected version. |
+| [checkpoint](learning/checkpoint.md) | Log fluency gained at the end of a coding-practice session, not features shipped. |
 
 ### Work vault
 
@@ -73,7 +73,6 @@ Obsidian-style vault skills. Path-bound to a vault's folder conventions (`daily_
 | [weekly-review](work-vault/weekly-review.md) | Weekly roll-up — aggregate logs, total time by project, surface what stalled, set next week's priorities. |
 | [timesheet](work-vault/timesheet.md) | Hours summary over any custom date range. Reporting only. |
 | [inbox-sort](work-vault/inbox-sort.md) | Triage and clear the capture inbox, routing each note to its folder and updating memory. |
-| [commit-check](work-vault/commit-check.md) | Pre-push safety scan — secrets, credentials, PHI, confidential or machine-local material. |
 | [daily-retro](work-vault/daily-retro.md) | Backfill a missing daily note from git history, using only what each commit's diff proves. |
 | [intake/](work-vault/intake/) | Single ingestion point for the capture inbox — route each new item to the right workflow via `routing.md`. |
 
@@ -81,15 +80,30 @@ Obsidian-style vault skills. Path-bound to a vault's folder conventions (`daily_
 
 | Skill | What it does |
 |-------|--------------|
-| [livekit-agents](livekit-agents.md) | Build voice AI agents with LiveKit Cloud and the Agents SDK (handoffs, tasks, mandatory tests). Freshness rules in [livekit-agents-support/](livekit-agents-support/). |
-| [mp3-metadata/](media/mp3-metadata/) | Inspect, fix and batch-rename MP3 ID3 tags, with bundled Python scripts. |
-| [chat-report/](media/chat-report/) | Turn an exported chat (WhatsApp, iMessage, Telegram, …) into a blunt outside-observer HTML report on the people in it. Runs locally. |
+| [livekit-agents/](domain/livekit-agents/) | Build voice AI agents with LiveKit Cloud and the Agents SDK (handoffs, tasks, mandatory tests). Includes freshness rules. |
+| [mp3-metadata/](domain/mp3-metadata/) | Inspect, fix and batch-rename MP3 ID3 tags, with bundled Python scripts. |
+| [chat-report/](domain/chat-report/) | Turn an exported chat (WhatsApp, iMessage, Telegram, …) into a blunt outside-observer HTML report on the people in it. Runs locally. |
 
 ### Meta
 
 | Skill | What it does |
 |-------|--------------|
 | [skill-creator/](meta/skill-creator/) | Guide and scripts for creating new skills. Apache-2.0 (see its `LICENSE.txt`); scripts lightly modified. |
+
+### Kits
+
+Install bundles, not skills.
+
+| Kit | What it is |
+|-----|------------|
+| [claude_config_template/](kits/claude_config_template/) | Drop-in, project-agnostic folder-based context system; bootstraps from `CLAUDE.md`. |
+| [knowledge_management/](kits/knowledge_management/) | Work-vault write-up and installable Obsidian vault template, with its bundled vault skills. |
+
+### Docs
+
+| Doc | What it is |
+|-----|------------|
+| [auto-routing/](docs/auto-routing/) | Design spec for model and effort routing, with the review that prompted its rewrite. |
 
 Skills listed with a trailing `/` are directories — `SKILL.md` plus the reference files or scripts it loads — and install as-is.
 

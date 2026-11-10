@@ -4,7 +4,7 @@ A **work vault** — an Obsidian vault paired with a file-based Claude context s
 
 The pairing is the point. Files are ground truth for both the human (Obsidian: search, backlinks, graph) and the assistant (Claude: loads the relevant files at the start of a session and holds the full state of the work in context — a colleague who's read everything, not a search engine).
 
-This is the sanitized write-up + installable template. See `../README.md` for how this repo's sanitized/operational split works generally.
+This is the sanitized write-up + installable template. See `../../README.md` for how this repo's sanitized/operational split works generally.
 
 ---
 
@@ -36,7 +36,7 @@ This is the sanitized write-up + installable template. See `../README.md` for ho
 | `claude_config/commands/` | Reusable prompts for starting a session and persisting context at the end of one. |
 | `template_md/` | One note template per type (daily, meeting, decision, project, research, planning, person, bug-fix, issues, user-stories) — copy into the right `*_obs/` folder and fill in. |
 
-**A `/skills` layer automates the recurring loops** — capture, roll-up, triage, safety. Vault-specific ones (`tracking`, `eod-summary`, `weekly-review`, `timesheet`, `inbox-sort`, `commit-check`) are sanitized individually under `../work-vault/`; this template bundles installable copies of them at `vault_template/skills/` so a new vault is self-contained without depending on this repo staying cloned nearby. `workshop` and `storm-research` are general-purpose skills (`../workshop.md`, `../research/storm-research.md`) that happen to be useful here too — the vault's `CLAUDE.md` flags them as global rather than vault-bundled. `timeline` (dependency-aware project timelines / Gantt) is documented as a live workflow in `claude_config/commands/skills.md` but isn't packaged as a standalone skill file here.
+**A `/skills` layer automates the recurring loops** — capture, roll-up, triage, safety. Vault-specific ones (`tracking`, `eod-summary`, `weekly-review`, `timesheet`, `inbox-sort`, `commit-check`) are sanitized individually under `../../work-vault/` (`commit-check` under `../../dev-workflow/`); this template bundles installable copies of them at `vault_template/skills/` so a new vault is self-contained without depending on this repo staying cloned nearby. `workshop` and `storm-research` are general-purpose skills (`../../learning/workshop.md`, `../../learning/storm-research.md`) that happen to be useful here too — the vault's `CLAUDE.md` flags them as global rather than vault-bundled. `timeline` (dependency-aware project timelines / Gantt) is documented as a live workflow in `claude_config/commands/skills.md` but isn't packaged as a standalone skill file here.
 
 ---
 
