@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root{
+  color-scheme: light;
+  --plane:#f9f9f7; --surface:#fcfcfb; --raised:#ffffff;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --line:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --accent:#2a78d6;
+  --p0:#2a78d6; --p1:#eb6834; --p2:#1baf7a; --p3:#eda100;
+  --p4:#e87ba4; --p5:#008300; --p6:#4a3aa7; --p7:#e34948;
+  --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --measure: 34rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --raised:#232322;
+    --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --line:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+    --accent:#3987e5;
+    --p0:#3987e5; --p1:#d95926; --p2:#199e70; --p3:#c98500;
+    --p4:#d55181; --p5:#008300; --p6:#9085e9; --p7:#e66767;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --raised:#232322;
+  --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --line:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --accent:#3987e5;
+  --p0:#3987e5; --p1:#d95926; --p2:#199e70; --p3:#c98500;
+  --p4:#d55181; --p5:#008300; --p6:#9085e9; --p7:#e66767;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:5.5rem}
+body{
+  margin:0; background:var(--plane); color:var(--ink);
+  font-family:var(--sans); font-size:17px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:52rem; margin:0 auto; padding:0 1.25rem}
+
+/* ---------- progress + top bar ---------- */
+#progress{position:fixed; top:0; left:0; height:2px; background:var(--accent);
+  width:0; z-index:60; transition:width .1s linear}
+.topbar{
+  position:sticky; top:0; z-index:50; background:color-mix(in srgb, var(--plane) 88%, transparent);
+  backdrop-filter:saturate(1.4) blur(12px); border-bottom:1px solid var(--line);
+}
+.topbar .wrap{display:flex; align-items:center; gap:.75rem; height:3.5rem}
+.brand{font-family:var(--serif); font-size:1.02rem; font-weight:600; letter-spacing:-.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-right:auto}
+.brand span{color:var(--ink-3); font-family:var(--sans); font-size:.8rem; font-weight:400}
+.iconbtn{border:1px solid var(--ring); background:var(--surface); color:var(--ink-2);
+  border-radius:99px; width:2rem; height:2rem; display:grid; place-items:center;
+  cursor:pointer; font-size:.9rem; flex:none}
+.iconbtn:hover{color:var(--ink); border-color:var(--axis)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex; gap:.25rem; overflow-x:auto; scrollbar-width:none;
+  border-bottom:1px solid var(--line); background:var(--plane);
+  position:sticky; top:3.5rem; z-index:45}
+.tabs::-webkit-scrollbar{display:none}
+.tabs .wrap{display:flex; gap:.25rem; padding-top:.4rem}
+.tab{
+  appearance:none; border:0; background:none; cursor:pointer; white-space:nowrap;
+  font:inherit; font-size:.92rem; color:var(--ink-3); padding:.45rem .7rem .6rem;
+  border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; gap:.4rem;
+}
+.tab:hover{color:var(--ink-2)}
+.tab[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--accent); font-weight:600}
+
+/* ---------- jump chips ---------- */
+.jump{display:flex; gap:.4rem; overflow-x:auto; scrollbar-width:none; padding:.7rem 0 .1rem}
+.jump::-webkit-scrollbar{display:none}
+.jump a{
+  font-size:.78rem; color:var(--ink-3); text-decoration:none; white-space:nowrap;
+  border:1px solid var(--line); border-radius:99px; padding:.2rem .6rem; background:var(--surface);
+}
+.jump a:hover{color:var(--ink)}
+.jump a.on{color:var(--ink); border-color:var(--axis); background:var(--raised)}
+
+/* ---------- hero ---------- */
+.hero{padding:3.5rem 0 1.5rem}
+.eyebrow{font-size:.75rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin:0 0 1rem}
+.hero h1{font-family:var(--serif); font-size:clamp(2.2rem,6vw,3.6rem); line-height:1.05;
+  letter-spacing:-.025em; margin:0 0 1rem; font-weight:600}
+.standfirst{font-size:1.15rem; color:var(--ink-2); max-width:var(--measure); margin:0 0 1.75rem}
+.updated{font-size:.82rem; color:var(--ink-3); margin:-1.1rem 0 1.6rem;
+  padding-left:.7rem; border-left:2px solid var(--axis); max-width:var(--measure)}
+.updated:empty{display:none}
+.chips{display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1.75rem}
+.chips:empty{display:none}
+.chip.src i{border-radius:2px}
+/* the revision note, for a report that has been added to */
+.revision{max-width:var(--measure); margin:1.5rem 0; padding:.9rem 1.1rem;
+  background:var(--raised); border:1px solid var(--axis); border-left:3px solid var(--accent);
+  border-radius:10px; font-size:.94rem}
+.revision b{display:block; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-3); margin-bottom:.3rem}
+.revision ul{margin:.4rem 0 0; padding-left:1.1rem}
+.revision li{margin-bottom:.25rem}
+.chip{display:inline-flex; align-items:center; gap:.45rem; font-size:.85rem;
+  border:1px solid var(--line); background:var(--surface); border-radius:99px; padding:.3rem .75rem}
+.chip i{width:.6rem; height:.6rem; border-radius:99px; background:var(--dot,var(--ink-3)); flex:none}
+.chip b{font-weight:600}
+.chip s{color:var(--ink-3); text-decoration:none}
+.statstrip{display:grid; grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));
+  gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.statstrip div{background:var(--surface); padding:.9rem 1rem}
+.statstrip dt{font-size:.75rem; color:var(--ink-3); margin:0 0 .15rem}
+.statstrip dd{margin:0; font-size:1.5rem; font-weight:600; letter-spacing:-.02em}
+
+/* ---------- prose ---------- */
+main{padding-bottom:6rem}
+section[data-tab]{display:none}
+section[data-tab].on{display:block; animation:fade .25s ease}
+@keyframes fade{from{opacity:0; transform:translateY(4px)}to{opacity:1;transform:none}}
+h2{font-family:var(--serif); font-size:1.85rem; line-height:1.2; letter-spacing:-.02em;
+  margin:3.25rem 0 .9rem; font-weight:600; scroll-margin-top:7rem}
+h2 .e{margin-right:.5rem}
+h3{font-size:1.05rem; margin:2rem 0 .5rem; letter-spacing:-.01em}
+p{max-width:var(--measure); margin:0 0 1.05rem}
+.lede{font-size:1.2rem; color:var(--ink-2)}
+strong{font-weight:650}
+hr{border:0; border-top:1px solid var(--line); margin:3rem 0}
+ul,ol{max-width:var(--measure); padding-left:1.2rem}
+li{margin-bottom:.45rem}
+a{color:var(--accent)}
+
+/* ---------- components ---------- */
+.verdict{
+  max-width:var(--measure); margin:1.75rem 0; padding:.15rem 0 .15rem 1.25rem;
+  border-left:3px solid var(--accent); font-family:var(--serif); font-size:1.3rem;
+  line-height:1.35; letter-spacing:-.01em;
+}
+.note{max-width:var(--measure); margin:1.5rem 0; padding:.9rem 1.1rem; background:var(--surface);
+  border:1px solid var(--line); border-radius:10px; font-size:.94rem; color:var(--ink-2)}
+.note b{color:var(--ink)}
+.sting{cursor:pointer; border-radius:4px}
+.sting[data-hidden="1"]{filter:blur(6px); user-select:none; background:var(--line)}
+.sting[data-hidden="1"]::after{content:" (tap)"; font-size:.7em; vertical-align:super}
+
+/* A claim that goes beyond what the export literally contains. */
+.inferred{border-bottom:1px dotted var(--ink-3); cursor:help}
+
+/* What the export physically cannot contain. */
+.limits{max-width:var(--measure); margin:1.5rem 0; padding:.9rem 1.1rem;
+  background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--axis); border-radius:10px; font-size:.9rem;
+  color:var(--ink-2)}
+.limits b{display:block; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-3); margin-bottom:.4rem}
+.limits ul{margin:.3rem 0 0; padding-left:1.1rem}
+.limits li{margin-bottom:.2rem}
+
+/* Copy-link on a heading. */
+.anchor{opacity:0; margin-left:.4rem; font-size:.65em; color:var(--ink-3);
+  border:0; background:none; cursor:pointer; vertical-align:middle; padding:0 .2rem;
+  transition:opacity .12s}
+h2:hover .anchor,.anchor:focus{opacity:1}
+.anchor.done{opacity:1; color:var(--accent)}
+
+.msg{max-width:var(--measure); margin:.35rem 0; padding:.55rem .85rem .5rem;
+  background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--who,var(--axis));
+  border-radius:4px 10px 10px 4px}
+.msg .who{font-size:.75rem; font-weight:650; color:var(--ink-2); display:block}
+.msg p{margin:.1rem 0 0; font-size:.97rem; white-space:pre-wrap}
+.msg time{font-size:.72rem; color:var(--ink-3)}
+
+/* Which room a quote came from. In a combined report the same person is
+   speaking in up to five different chats and the page should say which. */
+.src{display:inline-flex; align-items:center; gap:.3rem; font-size:.68rem;
+  color:var(--ink-3); border:1px solid var(--line); border-radius:99px;
+  padding:.02rem .45rem; white-space:nowrap; vertical-align:middle}
+.src::before{content:""; width:.4rem; height:.4rem; border-radius:99px;
+  background:var(--srcc,var(--axis)); flex:none}
+.msg .who .src{margin-left:.4rem; font-weight:400}
+.pull cite .src{margin-left:.45rem}
+.exchange{margin:1.5rem 0}
+.exchange .msg{margin-bottom:.3rem}
+
+.pull{max-width:var(--measure); margin:2.25rem 0; font-family:var(--serif);
+  font-size:1.5rem; line-height:1.3; letter-spacing:-.02em; color:var(--ink)}
+.pull cite{display:block; font:400 .8rem/1.4 var(--sans); color:var(--ink-3); margin-top:.6rem; font-style:normal}
+
+.cards{display:grid; gap:1rem; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); margin:1.5rem 0}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:1.1rem 1.2rem}
+.card h4{margin:0 0 .35rem; font-size:.95rem}
+.card p{font-size:.92rem; color:var(--ink-2); margin:0}
+
+.person{border:1px solid var(--line); border-radius:14px; background:var(--surface);
+  padding:1.5rem 1.5rem .4rem; margin:2rem 0; border-top:3px solid var(--who,var(--accent))}
+.person > h2{margin-top:.2rem}
+.person .role{font-size:.95rem; color:var(--ink-3); margin:-.5rem 0 1.25rem}
+.person .avatar{width:2.4rem; height:2.4rem; border-radius:99px; background:var(--who,var(--accent));
+  color:#fff; display:grid; place-items:center; font-weight:650; font-size:1.05rem; margin-bottom:.75rem}
+.miniStats{display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 1.25rem}
+.miniStats span{font-size:.78rem; border:1px solid var(--line); border-radius:99px;
+  padding:.15rem .6rem; color:var(--ink-2); background:var(--plane)}
+.miniStats span b{color:var(--ink); font-weight:650}
+
+.chain{max-width:var(--measure); margin:1.5rem 0; counter-reset:step}
+.chain li{list-style:none; position:relative; padding:.6rem 0 .6rem 2.4rem; border-bottom:1px solid var(--line)}
+.chain li:last-child{border-bottom:0}
+.chain li::before{counter-increment:step; content:counter(step);
+  position:absolute; left:0; top:.55rem; width:1.6rem; height:1.6rem; border-radius:99px;
+  background:var(--surface); border:1px solid var(--axis); display:grid; place-items:center;
+  font-size:.75rem; color:var(--ink-2)}
+.chain{padding-left:0}
+
+.dict{max-width:var(--measure)}
+.dict dt{font-weight:650; margin-top:1rem}
+.dict dd{margin:.15rem 0 0; color:var(--ink-2); font-size:.95rem}
+.awards{list-style:none; padding:0; max-width:var(--measure)}
+.awards li{border-bottom:1px solid var(--line); padding:.75rem 0; display:flex; gap:.8rem}
+.awards li b{flex:none; width:9rem; font-size:.85rem; color:var(--ink-3); font-weight:500; padding-top:.1rem}
+.era{display:flex; gap:1rem; padding:.9rem 0; border-bottom:1px solid var(--line); max-width:var(--measure)}
+.era time{flex:none; width:8rem; font-size:.82rem; color:var(--ink-3); font-variant-numeric:tabular-nums}
+.era b{display:block}
+.era p{margin:.1rem 0 0; font-size:.94rem; color:var(--ink-2)}
+
+/* ---------- charts ---------- */
+.chart{margin:2rem 0; padding:1.25rem 1.35rem 1rem; background:var(--surface);
+  border:1px solid var(--line); border-radius:12px}
+.chart figcaption{font-size:.95rem; font-weight:600; margin-bottom:.15rem}
+.chart .sub{font-size:.82rem; color:var(--ink-3); margin:0 0 1rem; max-width:100%}
+.legend{display:flex; flex-wrap:wrap; gap:.75rem; margin:.9rem 0 0; font-size:.8rem; color:var(--ink-2)}
+.legend span{display:inline-flex; align-items:center; gap:.35rem}
+.legend i{width:.65rem; height:.65rem; border-radius:3px; background:var(--c); flex:none}
+.chart .foot{display:flex; justify-content:flex-end; margin-top:.5rem}
+.chart .foot button{font:inherit; font-size:.75rem; color:var(--ink-3); background:none;
+  border:1px solid var(--line); border-radius:99px; padding:.1rem .6rem; cursor:pointer}
+.chart .foot button:hover{color:var(--ink)}
+.chart table{width:100%; border-collapse:collapse; font-size:.82rem; margin-top:.75rem;
+  font-variant-numeric:tabular-nums}
+.chart th,.chart td{text-align:right; padding:.3rem .5rem; border-bottom:1px solid var(--line)}
+.chart th:first-child,.chart td:first-child{text-align:left}
+.chart th{color:var(--ink-3); font-weight:500}
+.chart [hidden]{display:none}
+
+.rows{display:grid; gap:.55rem}
+.row{display:grid; grid-template-columns:minmax(4rem,7rem) 1fr auto; align-items:center; gap:.7rem}
+.row .lbl{font-size:.84rem; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.row .track{height:14px; position:relative}
+.row .fill{height:14px; background:var(--c); border-radius:0 4px 4px 0; min-width:2px}
+.row .val{font-size:.8rem; color:var(--ink-2); font-variant-numeric:tabular-nums; white-space:nowrap}
+
+.cols{display:flex; align-items:flex-end; gap:2px; height:150px; margin-top:.5rem}
+.col{flex:1; display:flex; flex-direction:column-reverse; gap:2px; min-width:3px; cursor:default}
+.col .seg{background:var(--c); min-height:1px}
+.col .seg:last-child{border-radius:4px 4px 0 0}
+.axisrow{display:flex; gap:2px; margin-top:.4rem; font-size:.68rem; color:var(--ink-3)}
+.axisrow span{flex:1; text-align:center; overflow:hidden; white-space:nowrap; min-width:3px}
+
+.heat{display:grid; gap:2px; grid-template-columns:7rem repeat(24,1fr); align-items:center}
+.heat .lbl{font-size:.8rem; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.heat .cell{aspect-ratio:1; border-radius:2px; background:var(--c); min-height:10px}
+.heat .hr{font-size:.62rem; color:var(--ink-3); text-align:center}
+
+#tip{position:fixed; z-index:80; pointer-events:none; opacity:0; transition:opacity .1s;
+  background:var(--raised); color:var(--ink); border:1px solid var(--ring); border-radius:8px;
+  padding:.5rem .65rem; font-size:.8rem; line-height:1.45; box-shadow:0 6px 24px rgba(0,0,0,.14);
+  max-width:16rem}
+#tip b{font-weight:650}
+
+footer{border-top:1px solid var(--line); padding:2rem 0 4rem; color:var(--ink-3); font-size:.82rem}
+
+@media (max-width:640px){
+  body{font-size:16px}
+  .heat{grid-template-columns:4.5rem repeat(24,1fr); gap:1px}
+  .person{padding:1.1rem 1rem .2rem}
+}
+@media print{
+  /* Every colour on this page is a variable, and in dark mode --ink is #ffffff.
+     Without this block, printing from dark mode puts white text on white
+     paper. Force the light palette regardless of what the screen was doing,
+     with the series colours darkened so they survive an inkjet. */
+  :root, :root[data-theme="dark"], :root[data-theme="light"]{
+    color-scheme:light;
+    --plane:#fff; --surface:#fff; --raised:#fff;
+    --ink:#000; --ink-2:#333; --ink-3:#5f5f5a;
+    --line:#c9c9c4; --axis:#9a9a92; --ring:rgba(0,0,0,.2);
+    --accent:#1f5fae;
+    --p0:#1f5fae; --p1:#c1541f; --p2:#12805a; --p3:#8f6b00;
+    --p4:#b04a72; --p5:#006100; --p6:#453a94; --p7:#b83a39;
+    --measure:100%;
+  }
+  @page{margin:16mm 14mm}
+  html{scroll-padding-top:0}
+  body{background:#fff; font-size:10.5pt; line-height:1.5}
+  .wrap{max-width:none; padding:0}
+  main{padding-bottom:0}
+
+  .topbar,.tabs,.jump,.chart .foot,#progress,#tip,.anchor{display:none !important}
+
+  /* All four tabs print. Each starts a page and carries its own name — without
+     this the PDF gives no clue which of the four parts you're reading. */
+  section[data-tab]{display:block !important}
+  section[data-tab].tabhead{break-before:page}
+  section[data-tab].tabfirst{break-before:auto}
+  section[data-tab].tabhead::before{
+    content:attr(data-label); display:block;
+    font:600 .72rem/1 var(--sans); letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink-3); border-bottom:1px solid var(--line);
+    padding-bottom:.5rem; margin:0 0 1.4rem;
+  }
+
+  /* Keep things whole, and don't strand a heading at the foot of a page. */
+  .msg,.exchange,.card,.era,.awards li,.revision,.verdict,.pull,
+  .statstrip,.chain li,.chart,.note,.limits,.cards{break-inside:avoid}
+  h2,h3,.chart figcaption,.dict dt,.person>h2,.person .role,.person .miniStats{
+    break-after:avoid}
+  .person{break-inside:auto}
+  p,li{orphans:3; widows:3}
+
+  /* Screen spacing is built for scrolling; on paper it wastes a third of the
+     page. */
+  h2{font-size:1.4rem; margin:1.5rem 0 .55rem; scroll-margin-top:0}
+  h3{margin:1rem 0 .3rem}
+  p{margin:0 0 .7rem}
+  .lede{font-size:1.05rem}
+  .verdict{font-size:1.1rem; margin:.9rem 0}
+  .pull{font-size:1.2rem; margin:1.1rem 0}
+  .note,.revision,.limits{margin:.9rem 0; padding:.6rem .8rem}
+  .chart{margin:1rem 0; padding:.75rem .9rem .5rem}
+  .person{margin:1rem 0; padding:1rem 1rem .2rem}
+  .person .avatar{display:none}
+  .cards{gap:.6rem; margin:1rem 0}
+  .card{padding:.75rem .85rem}
+  .msg{margin:.25rem 0}
+  .era{padding:.55rem 0}
+  .chain li{padding-top:.4rem; padding-bottom:.4rem}
+  footer{padding:1.5rem 0 0}
+
+  .cols{height:105px}
+  .heat .cell{min-height:7px}
+  .legend{margin-top:.5rem}
+  /* 24 colour cells per row reproduce badly. Print the numbers instead. */
+  .chart[data-chart="hours"] .heat{display:none}
+  .chart[data-chart="hours"] table[hidden]{display:table !important}
+
+  /* A blurred sentence is a screen affordance. On paper it's just damage. */
+  .sting[data-hidden="1"]{filter:none !important; background:none !important;
+    user-select:auto}
+  .sting[data-hidden="1"]::after{content:none}
+  .inferred{border-bottom:1px dotted var(--ink-3)}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">{{TITLE}} <span>{{BRANDLINE}}</span></div>
+    <button class="iconbtn" id="themeBtn" title="Light / dark" aria-label="Toggle theme">◐</button>
+    <button class="iconbtn" id="printBtn" title="Print or save as PDF" aria-label="Print">⎙</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"><div class="wrap" role="tablist">{{TABS}}</div></nav>
+
+<div class="wrap">
+  <div class="hero">
+    <p class="eyebrow">{{EYEBROW}}</p>
+    <h1>{{TITLE}}</h1>
+    <p class="standfirst">{{STANDFIRST}}</p>
+    <p class="updated">{{UPDATED}}</p>
+    <div class="chips" id="chips"></div>
+    <div class="chips" id="srcchips"></div>
+    <dl class="statstrip" id="statstrip"></dl>
+  </div>
+  <div class="jump" id="jump"></div>
+</div>
+
+<main class="wrap" id="main">
+{{CONTENT}}
+</main>
+
+<footer class="wrap">
+  Read from the export itself — every number here is counted, every quote copied as written.
+  Nothing left this machine.
+</footer>
+
+<div id="tip"></div>
+<script id="stats" type="application/json">{{DATA}}</script>
+<script>
+(function(){
+"use strict";
+var D = JSON.parse(document.getElementById('stats').textContent || '{}');
+var PEOPLE = (D.meta && D.meta.people) || [];
+var LIGHT = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+var DARK  = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#e66767'];
+var SEQ_L = ['#cde2fb','#9ec5f4','#6da7ec','#3987e5','#2a78d6','#256abf','#184f95'];
+var SEQ_D = ['#104281','#184f95','#1c5cab','#256abf','#2a78d6','#3987e5','#5598e7'];
+
+function dark(){
+  var t = document.documentElement.getAttribute('data-theme');
+  if (t) return t === 'dark';
+  return matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function pal(){ return dark() ? DARK : LIGHT; }
+function seq(){ return dark() ? SEQ_D : SEQ_L; }
+function colorOf(who){
+  var i = PEOPLE.indexOf(who);
+  return pal()[(i < 0 ? 0 : i) % 8];
+}
+function num(n){ return (n===null||n===undefined) ? '—' : n.toLocaleString(); }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function el(tag, cls, html){
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+function firstName(p){ return String(p).split(/\s+/)[0]; }
+function monthLabel(m){
+  var d = new Date(m + '-01T00:00:00');
+  return d.toLocaleString(undefined,{month:'short'}) + (d.getMonth()===0 ? " '" + String(d.getFullYear()).slice(2) : '');
+}
+function dayLabel(s){
+  var d = new Date(s);
+  return isNaN(d) ? s : d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+}
+
+/* ---------- hero ---------- */
+function hero(){
+  if (!D.meta) return;
+  var chips = document.getElementById('chips');
+  (D.share||[]).forEach(function(r){
+    var c = el('span','chip');
+    c.style.setProperty('--dot', colorOf(r.who));
+    c.innerHTML = '<i></i><b>' + esc(r.who) + '</b> <s>' + r.pct + '%</s>';
+    chips.appendChild(c);
+  });
+  var m = D.meta, months = Math.max(1, Math.round(m.days/30.4));
+  var srcs = m.sources || [];
+  if (srcs.length > 1){
+    var sc = document.getElementById('srcchips');
+    var pal8 = pal();
+    srcs.forEach(function(s, k){
+      var c = el('span','chip src');
+      c.style.setProperty('--dot', pal8[k % 8]);
+      c.innerHTML = '<i></i><b>' + esc(s.name) + '</b> <s>' + num(s.messages) + '</s>';
+      sc.appendChild(c);
+    });
+  }
+  var cells = [
+    ['Messages read', num(m.total)],
+    ['Across', months >= 24 ? (months/12).toFixed(1) + ' years' : months + ' months'],
+    ['A day, on average', num(m.per_day)],
+    [srcs.length > 1 ? 'Conversations read' : 'Separate conversations',
+     srcs.length > 1 ? num(srcs.length) + ' threads' : num(m.conversations)]
+  ];
+  var strip = document.getElementById('statstrip');
+  cells.forEach(function(c){
+    strip.appendChild(el('div', null, '<dt>' + c[0] + '</dt><dd>' + c[1] + '</dd>'));
+  });
+}
+
+/* ---------- tooltip ---------- */
+var tip = document.getElementById('tip');
+function bindTip(node, html){
+  node.addEventListener('mouseenter', function(){ tip.innerHTML = html; tip.style.opacity = 1; });
+  node.addEventListener('mousemove', function(e){
+    var w = tip.offsetWidth, x = Math.min(e.clientX + 14, innerWidth - w - 10);
+    tip.style.left = x + 'px';
+    tip.style.top = Math.max(8, e.clientY - tip.offsetHeight - 12) + 'px';
+  });
+  node.addEventListener('mouseleave', function(){ tip.style.opacity = 0; });
+}
+
+/* ---------- chart plumbing ---------- */
+function legend(items){
+  var l = el('div','legend');
+  items.forEach(function(it){
+    var s = el('span', null, '<i style="--c:' + it.c + '"></i>' + esc(it.label));
+    l.appendChild(s);
+  });
+  return l;
+}
+function tableView(head, rows){
+  var t = el('table');
+  t.hidden = true;
+  t.innerHTML = '<thead><tr>' + head.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('')
+    + '</tr></thead><tbody>' + rows.map(function(r){
+        return '<tr>' + r.map(function(c){ return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody>';
+  return t;
+}
+function attachTable(fig, head, rows){
+  var t = tableView(head, rows);
+  var foot = el('div','foot');
+  var b = el('button', null, 'Table');
+  b.addEventListener('click', function(){
+    t.hidden = !t.hidden;
+    b.textContent = t.hidden ? 'Table' : 'Hide table';
+  });
+  foot.appendChild(b);
+  fig.appendChild(t);
+  fig.appendChild(foot);
+}
+function barRows(plot, items, fmt){
+  var top = Math.max.apply(null, items.map(function(i){ return i.v; })) || 1;
+  var box = el('div','rows');
+  items.forEach(function(it){
+    var r = el('div','row');
+    r.innerHTML = '<div class="lbl">' + esc(it.label) + '</div>'
+      + '<div class="track"><div class="fill" style="--c:' + it.c
+      + '; width:' + Math.max(1.2, it.v / top * 100) + '%"></div></div>'
+      + '<div class="val">' + esc(fmt ? fmt(it) : num(it.v)) + '</div>';
+    if (it.tip) bindTip(r, it.tip);
+    box.appendChild(r);
+  });
+  plot.appendChild(box);
+}
+
+/* ---------- the charts ---------- */
+var CHARTS = {};
+
+CHARTS.share = function(fig, plot){
+  var rows = D.share || [];
+  cap(fig, 'Who does the talking', 'Share of every message sent.');
+  barRows(plot, rows.map(function(r){
+    return {label:r.who, v:r.count, c:colorOf(r.who),
+            tip:'<b>' + esc(r.who) + '</b><br>' + num(r.count) + ' messages · ' + r.pct
+                + '%<br>' + num(r.words) + ' words · ' + r.per_msg + ' a message'};
+  }), function(it){ return it.v.toLocaleString(); });
+  attachTable(fig, ['Person','Messages','Share','Words','Words a message'],
+    rows.map(function(r){ return [r.who, num(r.count), r.pct + '%', num(r.words), r.per_msg]; }));
+};
+
+CHARTS.timeline = function(fig, plot){
+  var ms = D.months || [];
+  if (!ms.length) return;
+  cap(fig, 'Month by month', 'Every message, stacked by who sent it. Hover for the split.');
+  var top = Math.max.apply(null, ms.map(function(m){ return m.total; })) || 1;
+  var cols = el('div','cols'), axis = el('div','axisrow');
+  var step = Math.ceil(ms.length / 12);
+  ms.forEach(function(m, i){
+    var c = el('div','col');
+    c.style.height = Math.max(2, m.total / top * 100) + '%';
+    PEOPLE.forEach(function(p){
+      var v = (m.by || {})[p] || 0;
+      if (!v) return;
+      var s = el('div','seg');
+      s.style.setProperty('--c', colorOf(p));
+      s.style.flexGrow = v;
+      c.appendChild(s);
+    });
+    bindTip(c, '<b>' + monthLabel(m.month) + '</b><br>' + num(m.total) + ' messages<br>'
+      + PEOPLE.filter(function(p){ return (m.by||{})[p]; }).map(function(p){
+          return esc(firstName(p)) + ' ' + num(m.by[p]); }).join(' · '));
+    cols.appendChild(c);
+    axis.appendChild(el('span', null, (i % step === 0) ? monthLabel(m.month) : ''));
+  });
+  plot.appendChild(cols);
+  plot.appendChild(axis);
+  plot.appendChild(legend(PEOPLE.map(function(p){ return {label:p, c:colorOf(p)}; })));
+  attachTable(fig, ['Month','Total'].concat(PEOPLE),
+    ms.map(function(m){ return [m.month, num(m.total)].concat(
+      PEOPLE.map(function(p){ return num((m.by||{})[p] || 0); })); }));
+};
+
+CHARTS.speed = function(fig, plot){
+  var rows = D.speed || [];
+  cap(fig, 'How long each person takes to answer', 'Typical wait before they reply to someone else.');
+  barRows(plot, rows.map(function(r){
+    return {label:r.who, v:r.median_min, c:colorOf(r.who), lab:r.label,
+            tip:'<b>' + esc(r.who) + '</b><br>typically ' + esc(r.label)
+                + '<br>' + r.within5 + '% inside five minutes<br>' + r.over6h + '% took six hours or more'};
+  }), function(it){ return it.lab; });
+  attachTable(fig, ['Person','Typical reply','Within 5 min','Took 6h+'],
+    rows.map(function(r){ return [r.who, r.label, r.within5 + '%', r.over6h + '%']; }));
+};
+
+CHARTS.opens = function(fig, plot){
+  var rows = D.opens || [];
+  cap(fig, 'Who reaches first, who lets it end',
+      'Counted across ' + num((D.meta||{}).conversations) + ' separate conversations — a new one starts after six hours of quiet.');
+  var items = [];
+  rows.forEach(function(r){
+    items.push({label:firstName(r.who) + ' — opens', v:r.opens, c:colorOf(r.who),
+      tip:'<b>' + esc(r.who) + '</b> started ' + num(r.opens) + ' conversations (' + r.opens_pct + '%)'});
+    items.push({label:firstName(r.who) + ' — last word', v:r.ends, c:colorOf(r.who),
+      tip:'<b>' + esc(r.who) + '</b> had the last word ' + num(r.ends) + ' times (' + r.ends_pct + '%)'});
+  });
+  barRows(plot, items);
+  attachTable(fig, ['Person','Opened','Share','Last word','Share'],
+    rows.map(function(r){ return [r.who, num(r.opens), r.opens_pct + '%', num(r.ends), r.ends_pct + '%']; }));
+};
+
+CHARTS.hours = function(fig, plot){
+  var H = D.hours || {};
+  cap(fig, 'The clock', 'When each person types. Darker means more.');
+  var grid = el('div','heat');
+  grid.appendChild(el('div','lbl',''));
+  for (var h = 0; h < 24; h++){
+    grid.appendChild(el('div','hr', (h % 6 === 0) ? (h + 'h') : ''));
+  }
+  PEOPLE.forEach(function(p){
+    var row = H[p] || [];
+    var mx = Math.max.apply(null, row.concat([1]));
+    grid.appendChild(el('div','lbl', esc(firstName(p))));
+    row.forEach(function(v, h){
+      var c = el('div','cell');
+      var steps = seq();
+      var idx = v === 0 ? -1 : Math.min(steps.length - 1, Math.floor(v / mx * (steps.length - 1) + .5));
+      c.style.setProperty('--c', idx < 0 ? 'var(--line)' : steps[idx]);
+      bindTip(c, '<b>' + esc(p) + '</b><br>' + num(v) + ' messages between '
+        + h + ':00 and ' + (h+1) + ':00');
+      grid.appendChild(c);
+    });
+  });
+  plot.appendChild(grid);
+  attachTable(fig, ['Person'].concat(Array.from({length:24}, function(_,h){ return h + 'h'; })),
+    PEOPLE.map(function(p){ return [p].concat((H[p]||[]).map(num)); }));
+};
+
+CHARTS.silences = function(fig, plot){
+  var rows = D.silences || [];
+  if (!rows.length){
+    cap(fig, 'The silences', 'There aren’t any — this chat never went quiet for a whole day.');
+    return;
+  }
+  cap(fig, 'The longest silences', 'Every gap of a day or more, and who spoke first afterwards.');
+  barRows(plot, rows.map(function(r){
+    return {label:dayLabel(r.from), v:r.days, c:colorOf(r.broke_who),
+            lab:r.days + ' days',
+            tip:'<b>' + r.days + ' days of nothing</b><br>' + dayLabel(r.from) + ' → ' + dayLabel(r.to)
+                + '<br>last word: ' + esc(firstName(r.last_who)) + ' — “' + esc(r.last_text) + '”'
+                + '<br>broke it: ' + esc(firstName(r.broke_who)) + ' — “' + esc(r.broke_text) + '”'};
+  }), function(it){ return it.lab; });
+  plot.appendChild(legend(PEOPLE.map(function(p){ return {label:'broken by ' + firstName(p), c:colorOf(p)}; })));
+  attachTable(fig, ['From','To','Days','Last word','Broke it'],
+    rows.map(function(r){ return [r.from, r.to, r.days, r.last_who, r.broke_who]; }));
+};
+
+CHARTS.markers = function(fig, plot){
+  var M = D.markers || {};
+  var keys = Object.keys(M[PEOPLE[0]] || {});
+  if (!keys.length) return;
+  cap(fig, 'Words that carry weight', 'How many messages from each person contain them.');
+  var wrapEl = el('div','cards');
+  keys.forEach(function(k){
+    var card = el('div','card');
+    card.appendChild(el('h4', null, esc(k)));
+    var items = PEOPLE.map(function(p){
+      return {label:firstName(p), v:(M[p]||{})[k] || 0, c:colorOf(p),
+              tip:'<b>' + esc(p) + '</b><br>' + num((M[p]||{})[k] || 0) + ' messages with “' + esc(k) + '”'};
+    });
+    barRows(card, items);
+    wrapEl.appendChild(card);
+  });
+  plot.appendChild(wrapEl);
+  attachTable(fig, ['Person'].concat(keys),
+    PEOPLE.map(function(p){ return [p].concat(keys.map(function(k){ return num((M[p]||{})[k] || 0); })); }));
+};
+
+CHARTS.questions = function(fig, plot){
+  var rows = D.habits || [];
+  cap(fig, 'Who asks', 'Messages containing a question mark.');
+  barRows(plot, rows.map(function(r){
+    return {label:r.who, v:r.questions, c:colorOf(r.who),
+            tip:'<b>' + esc(r.who) + '</b><br>' + num(r.questions) + ' messages with a question in them'};
+  }));
+  attachTable(fig, ['Person','Questions','Photos & clips','Deleted','After 1am'],
+    rows.map(function(r){ return [r.who, num(r.questions), num(r.media), num(r.deleted), num(r.night)]; }));
+};
+
+CHARTS.pairs = function(fig, plot){
+  var rows = (D.pairs || []).slice(0, 12);
+  if (rows.length < 2) return;
+  cap(fig, 'Who answers whom', 'Replies inside ten minutes — the real conversations within the group.');
+  barRows(plot, rows.map(function(r){
+    return {label:firstName(r.from) + ' → ' + firstName(r.to), v:r.n, c:colorOf(r.from),
+            tip:'<b>' + esc(r.from) + '</b> answered <b>' + esc(r.to) + '</b> ' + num(r.n) + ' times inside ten minutes'};
+  }));
+  attachTable(fig, ['Answers','Answered','Times'],
+    rows.map(function(r){ return [r.from, r.to, num(r.n)]; }));
+};
+
+CHARTS.sources = function(fig, plot){
+  var rows = D.by_source || [];
+  if (rows.length < 2) return;
+  cap(fig, 'Where this came from', 'Every export read into this report, and who spoke in each.');
+  var items = [];
+  rows.forEach(function(r){
+    PEOPLE.forEach(function(p){
+      var v = (r.by || {})[p] || 0;
+      if (!v) return;
+      items.push({label:r.source + ' — ' + firstName(p), v:v, c:colorOf(p),
+        tip:'<b>' + esc(p) + '</b> in <b>' + esc(r.source) + '</b><br>' + num(v) + ' messages'});
+    });
+  });
+  barRows(plot, items);
+  plot.appendChild(legend(PEOPLE.map(function(p){ return {label:p, c:colorOf(p)}; })));
+  attachTable(fig, ['Source','Total'].concat(PEOPLE),
+    rows.map(function(r){ return [r.source, num(r.total)].concat(
+      PEOPLE.map(function(p){ return num((r.by||{})[p] || 0); })); }));
+};
+
+CHARTS.sourceTimeline = function(fig, plot){
+  var ms = D.source_months || [];
+  var names = ((D.meta||{}).sources || []).map(function(s){ return s.name; });
+  if (ms.length < 2 || names.length < 2) return;
+  cap(fig, 'Which thread was alive when', 'Month by month, stacked by where the messages came from.');
+  var top = Math.max.apply(null, ms.map(function(m){ return m.total; })) || 1;
+  var cols = el('div','cols'), axis = el('div','axisrow');
+  var step = Math.ceil(ms.length / 12);
+  var pal8 = pal();
+  ms.forEach(function(m, i){
+    var c = el('div','col');
+    c.style.height = Math.max(2, m.total / top * 100) + '%';
+    names.forEach(function(n, k){
+      var v = (m.by || {})[n] || 0;
+      if (!v) return;
+      var s = el('div','seg');
+      s.style.setProperty('--c', pal8[k % 8]);
+      s.style.flexGrow = v;
+      c.appendChild(s);
+    });
+    bindTip(c, '<b>' + monthLabel(m.month) + '</b><br>' + num(m.total) + '<br>'
+      + names.filter(function(n){ return (m.by||{})[n]; }).map(function(n){
+          return esc(n) + ' ' + num(m.by[n]); }).join('<br>'));
+    cols.appendChild(c);
+    axis.appendChild(el('span', null, (i % step === 0) ? monthLabel(m.month) : ''));
+  });
+  plot.appendChild(cols);
+  plot.appendChild(axis);
+  plot.appendChild(legend(names.map(function(n, k){ return {label:n, c:pal8[k % 8]}; })));
+  attachTable(fig, ['Month','Total'].concat(names),
+    ms.map(function(m){ return [m.month, num(m.total)].concat(
+      names.map(function(n){ return num((m.by||{})[n] || 0); })); }));
+};
+
+CHARTS.runs = function(fig, plot){
+  var rows = D.runs || [];
+  cap(fig, 'Talking into the void', 'Times each person sent three or more in a row with no reply.');
+  barRows(plot, rows.map(function(r){
+    return {label:r.who, v:r.runs3, c:colorOf(r.who),
+            tip:'<b>' + esc(r.who) + '</b><br>' + num(r.runs3) + ' unanswered runs<br>longest: '
+                + r.longest + ' messages back to back'};
+  }));
+  attachTable(fig, ['Person','Runs of 3+','Longest run'],
+    rows.map(function(r){ return [r.who, num(r.runs3), r.longest]; }));
+};
+
+function cap(fig, title, sub){
+  var c = fig.querySelector('figcaption');
+  if (c && !c.textContent.trim()) c.textContent = title;
+  if (!c) { c = el('figcaption', null, title); fig.prepend(c); }
+  var s = fig.querySelector('.sub');
+  if (!s){ s = el('p','sub', sub); c.after(s); }
+  else if (!s.textContent.trim()) s.textContent = sub;
+}
+
+function drawAll(){
+  document.querySelectorAll('.chart').forEach(function(fig){
+    var kind = fig.getAttribute('data-chart');
+    var plot = fig.querySelector('.plot') || fig.appendChild(el('div','plot'));
+    plot.innerHTML = '';
+    fig.querySelectorAll('table, .foot, .legend').forEach(function(n){ n.remove(); });
+    if (CHARTS[kind]) {
+      try { CHARTS[kind](fig, plot); }
+      catch (e) { plot.innerHTML = '<p class="sub">(this one needs numbers the export didn’t have)</p>'; }
+    }
+  });
+}
+
+/* ---------- tabs ---------- */
+var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+var panels = Array.prototype.slice.call(document.querySelectorAll('section[data-tab]'));
+function showTab(name, push){
+  tabs.forEach(function(t){ t.setAttribute('aria-selected', t.dataset.tab === name); });
+  panels.forEach(function(p){ p.classList.toggle('on', p.dataset.tab === name); });
+  buildJump(name);
+  if (push) history.replaceState(null, '', '#' + name);
+  window.scrollTo({top:0, behavior:'instant'});
+}
+tabs.forEach(function(t){
+  t.addEventListener('click', function(){ showTab(t.dataset.tab, true); });
+});
+
+function buildJump(name){
+  var jump = document.getElementById('jump');
+  jump.innerHTML = '';
+  var hs = [];
+  panels.filter(function(p){ return p.dataset.tab === name; })
+        .forEach(function(p){ hs = hs.concat(Array.prototype.slice.call(p.querySelectorAll('h2'))); });
+  if (hs.length < 2){ jump.style.display = 'none'; return; }
+  jump.style.display = 'flex';
+  hs.forEach(function(h, i){
+    if (!h.id) h.id = 'h' + name + i;
+    var a = el('a', null, esc(h.textContent.replace(/^\s*\S*\s/, function(m){
+      return /[\p{Emoji}]/u.test(m) ? '' : m; }).trim() || h.textContent));
+    a.href = '#' + h.id;
+    a.dataset.for = h.id;
+    jump.appendChild(a);
+  });
+}
+function spy(){
+  var links = document.querySelectorAll('.jump a');
+  var best = null, bestTop = -1e9;
+  links.forEach(function(a){
+    var h = document.getElementById(a.dataset.for);
+    if (!h) return;
+    var top = h.getBoundingClientRect().top - 120;
+    if (top < 0 && top > bestTop){ bestTop = top; best = a; }
+  });
+  links.forEach(function(a){ a.classList.toggle('on', a === best); });
+}
+
+/* ---------- chrome ---------- */
+document.getElementById('themeBtn').addEventListener('click', function(){
+  var now = dark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', now);
+  drawAll();
+});
+document.getElementById('printBtn').addEventListener('click', function(){ window.print(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){
+  if (!document.documentElement.getAttribute('data-theme')) drawAll();
+});
+
+document.addEventListener('click', function(e){
+  var s = e.target.closest('.sting');
+  if (s) s.dataset.hidden = s.dataset.hidden === '1' ? '0' : '1';
+});
+document.querySelectorAll('.sting').forEach(function(s){ s.dataset.hidden = '1'; });
+
+document.querySelectorAll('.msg[data-who], .person[data-who]').forEach(function(n){
+  n.style.setProperty('--who', colorOf(n.getAttribute('data-who')));
+});
+document.querySelectorAll('.person[data-who]').forEach(function(n){
+  var who = n.getAttribute('data-who');
+  var av = n.querySelector('.avatar');
+  if (av && !av.textContent.trim()) av.textContent = firstName(who).slice(0,1).toUpperCase();
+});
+
+addEventListener('scroll', function(){
+  var h = document.body.scrollHeight - innerHeight;
+  document.getElementById('progress').style.width = (h > 0 ? scrollY / h * 100 : 0) + '%';
+  spy();
+}, {passive:true});
+
+hero();
+drawAll();
+var start = location.hash.slice(1);
+showTab(tabs.some(function(t){ return t.dataset.tab === start; }) ? start : (tabs[0] && tabs[0].dataset.tab));
+})();
+</script>
+</body>
+</html>
