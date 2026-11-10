@@ -1,13 +1,14 @@
 ---
 name: feature-team
-description: Run a full feature through a simulated dev team — manager-orchestrated cycle of product-manager, tech-lead, developer, qa-engineer, code-reviewer, and devops-engineer roles, with gates and a bounded review loop. Invoke when the user wants a feature taken end-to-end ("build feature X with the team", "run the agent team on Y") rather than a quick edit. Usage: /feature-team <feature description>.
+description: >-
+  Run a full feature through a simulated dev team — manager-orchestrated cycle of product-manager, tech-lead, developer, qa-engineer, code-reviewer, and devops-engineer roles, with gates and a bounded review loop. Invoke when the user wants a feature taken end-to-end ("build feature X with the team", "run the agent team on Y") rather than a quick edit. Usage: /feature-team <feature description>.
 ---
 
 # feature-team — the Manager
 
 You (the main thread) are the **Engineering Manager / Tech Project Manager**. You do not write the feature yourself. You decompose it, launch role subagents, gate their artifacts, loop on blocking review findings, and integrate. Subagents cannot spawn subagents — orchestration is yours alone.
 
-Before starting, read the shared dev-cycle definition your project keeps (stages, gates, handoff format, and hard rules) once. Track stage progress with your task-tracking tools so the user can see it.
+Before starting, read the dev-cycle protocol once — `dev-cycle.md`, bundled alongside this skill, or the project's own if it keeps one. It defines the stages, gates, handoff format, and hard rules. Track stage progress with your task-tracking tools so the user can see it.
 
 ## 0. Intake
 
@@ -24,7 +25,7 @@ For each stage, launch the owning role subagent, passing the workspace path, whi
 | 1 Requirements | `product-manager` | criteria testable, scope + non-goals, edge cases |
 | 2 Design | `tech-lead` | alternative named, file plan, risks, test strategy |
 | 3 Implementation | `developer` (+ any project specialists) | matches file plan, conventions, builds |
-| 4 Test | `qa-engineer` | every criterion mapped to a test; honest results |
+| 4 Test | `qa-engineer` | every criterion mapped to a test; honest results; if the project has a Check contract, its `full` checks with `Needs: none` are green with output attached (see dev-cycle.md) |
 | 5 Review | `code-reviewer` | no unresolved BLOCKING findings |
 | 6 Deploy readiness | `devops-engineer` | deps resolve, CI noted, secret scan clean |
 
@@ -38,7 +39,8 @@ For each stage, launch the owning role subagent, passing the workspace path, whi
 
 1. Summarize for the user: what was built, files changed, test results, review verdict, deploy readiness, open questions/escalations.
 2. Update the project's current-task and changelog notes (and any decisions log if a decision was closed).
-3. Do **not** commit, push, or deploy unless the user explicitly asks.
+3. If the project keeps a daily log, add a Done entry to today's note: what was built, the outcome, the verifier, the cycle workspace path, and a `**Cost:**` line (review rounds, whether the contract's checks passed first time, tokens if known).
+4. Do **not** commit, push, or deploy unless the user explicitly asks.
 
 ## Guardrails
 

@@ -38,7 +38,7 @@ Keep groups small but not trivial. Tests travel with the code they cover unless 
 ## 4. Be honest about entanglement
 
 If a single file carries multiple concerns, you **cannot** split it (Hard rule 2). Put it in the group matching its dominant concern and add a one-line flag:
-`⚠ <file> also contains <other concern> — can't isolate without git add -p (your call).`
+`Warning: <file> also contains <other concern> — can't isolate without git add -p (your call).`
 Likewise flag when grouping by file forces an intermediate commit that won't import/build cleanly on its own.
 
 ## 5. Exclusions
@@ -48,9 +48,31 @@ Likewise flag when grouping by file forces an intermediate commit that won't imp
 
 ## 6. Message style
 
-- **Match the repo** (per the convention detected in §1). If it uses Conventional Commits: a `type(scope): subject` line (`feat`/`fix`/`refactor`/`chore`/`test`/`docs`), blank line, then a `-` bullet body explaining what and why. Otherwise follow whatever the history shows.
+- **Match the repo** (per the convention detected in §1). If it uses Conventional Commits: a `type(scope): subject` line (`feat`/`fix`/`refactor`/`chore`/`test`/`docs`), blank line, then a `-` bullet body. Otherwise follow whatever the history shows.
 - Subject in imperative mood, ≤ ~72 chars, no trailing period.
+- **Body is a terse bullet list, not prose.** One line per bullet, stating *what* changed — not why, not background, not rationale. Skip a bullet's justification unless the subject line would be genuinely misleading without it (rare — most changes don't need it).
+- **2-4 bullets per commit, regardless of how many files or concerns are folded in.** Combine related changes into one bullet rather than writing one bullet per file. No sub-bullets, no multi-sentence bullets, no bullet that reads like a paragraph.
 - If the project's git rules define a global commit trailer (e.g. a `Co-Authored-By:` line), end **every** drafted message with it. If none is defined, omit it.
+
+Target shape:
+```
+fix: AB#1234 token leak in export event + settings-panel sizing
+
+- Drop `session_token` from the export `done` event; update test + docs
+- Settings: `.side-panel` min-height matches iframe, no more collapse/snap
+- Settings: export-mode control switched from radio buttons to a switch
+```
+Not this (too long, explains why, one bullet per file):
+```
+- Drop `session_token` from the export `done` JSON event — the server
+  already stores it and the shipped client never reads it back from
+  that field. Test assertion and the public API doc updated
+  to match.
+- Settings page: `.side-panel` gets `min-height: 640px` matching the
+  iframe's fixed height, so it doesn't render collapsed then snap
+  taller once `app:export-ready` fires; also converts the
+  export-mode control from radio buttons to a toggle switch.
+```
 
 ## 7. Output
 

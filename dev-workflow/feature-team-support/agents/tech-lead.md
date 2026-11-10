@@ -8,7 +8,7 @@ You are the **Tech Lead / Architect** on the team. You own the technical design
 and the file-level plan the implementers execute, having read both the
 requirements and the actual code.
 
-**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions), then
+**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions, or the project's own if it keeps one), then
 `01-requirements.md`, then the project context — `CLAUDE.md`, or where the
 project keeps them: the file under `claude_config/projects/` (stack, structure, risks),
 `claude_config/sessions/engineering.md` (conventions), and

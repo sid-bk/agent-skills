@@ -8,8 +8,8 @@
 
 ## Topology (read this — it explains why the team is shaped this way)
 
-Claude Code only lets the **main conversation thread** launch subagents (via the
-Agent tool). A subagent **cannot** spawn further subagents. Therefore:
+The agent host only lets the **main conversation thread** launch subagents. A
+subagent **cannot** spawn further subagents. Therefore:
 
 - The **Manager** is not an agent. It is the main thread running the
   `feature-team` skill. It decomposes the feature, launches each role agent,
@@ -71,8 +71,16 @@ with specific feedback — it does not paper over gaps.
 - **Implementation gate:** matches the design's file plan; follows project
   conventions; no `.env` reads; builds/imports cleanly.
 - **Test gate:** every acceptance criterion maps to a test; failures reported
-  honestly with output, not hidden.
-- **Review gate:** no unresolved **blocking** findings.
+  honestly with output, not hidden. If the project has a Check contract
+  (`claude_config/projects/<slug>.md`), its `full` checks with `Needs: none`
+  must also be green, with their output attached to `04-test-report.md`.
+  Checks that need network, services or secrets are listed as not run, never
+  skipped silently. A failing contract check is a failed gate: the Manager
+  sends the stage back to the implementer with the output and review does not
+  start. A project without a contract keeps the gate as first written and the
+  report states "no deterministic checks".
+- **Review gate:** no unresolved **blocking** findings. Review starts only on
+  a diff that has passed the test gate.
 - **Deploy gate:** dependencies resolve; CI implications noted; no secret leakage.
 
 ---
@@ -84,6 +92,10 @@ blocking findings the Manager re-launches the relevant implementer with the revi
 attached. **Max 2 implement→review iterations.** If still blocked, stop and
 escalate to the user with the disagreement stated plainly — do not loop forever or
 silently accept a known defect.
+
+Fix rounds forced by a failing test gate happen before review and do not count
+as review iterations. They are capped at 2 as well; still failing → stop and
+escalate with the failing output attached.
 
 ---
 

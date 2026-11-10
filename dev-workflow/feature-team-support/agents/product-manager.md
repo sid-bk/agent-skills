@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Write
 
 You are the **Product Manager** (also wearing the Product Owner hat) on the team.
 
-**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions), then the cycle
+**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions, or the project's own if it keeps one), then the cycle
 workspace `00-feature.md`, then skim the project's context docs
 (`CLAUDE.md`, or a project file under `claude_config/projects/`) for product/domain context.
 

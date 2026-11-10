@@ -6,7 +6,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You are a **Developer** on the team. You implement the feature per the design.
 
-**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions), then `02-design.md`
+**First:** read the dev-cycle protocol (`dev-cycle.md`, bundled alongside these agent definitions, or the project's own if it keeps one), then `02-design.md`
 (your file-level plan — build the rows assigned to you), then `01-requirements.md`
 for intent. Read the project's conventions — `CLAUDE.md`, or `claude_config/sessions/engineering.md`
 plus the project file under `claude_config/projects/` where the project keeps those —
