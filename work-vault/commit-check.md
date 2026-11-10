@@ -53,11 +53,11 @@ Scan file **contents** (the diff/hunks) and file **paths/names**, not just filen
    pattern-match.
 
 3. **Rank and report.** Group findings by severity:
-   - 🔴 **Block** — secrets, credentials, key/env files, raw personal/health data.
+   - **Block** — secrets, credentials, key/env files, raw personal/health data.
      Do **not** push until resolved.
-   - 🟡 **Review** — possible confidential material, personal contact details,
+   - **Review** — possible confidential material, personal contact details,
      gray-area items; user judgment call.
-   - ⚪ **Cleanup** — machine-local cruft or large binaries that should be gitignored
+   - **Cleanup** — machine-local cruft or large binaries that should be gitignored
      or moved; not secret but shouldn't be in history.
 
    For each: file path, line/hunk, category, one-line why. Cite `file:line`. If
