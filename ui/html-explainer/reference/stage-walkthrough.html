@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en" style="color-scheme: light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Engine Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/*
+  Design record
+  order_engine_arch_v1: the fulfilment-priority engine's code architecture, one batch run from ruleset version to ranked pick list.
+  Direction: light warm theme, single violet accent, vertical flowchart with a three-lane fork, side rails and
+  Back / Next stepper. This page follows one engine run through the code.
+  Dials: layout variance low, motion low-medium (stage focus, card highlight only), density medium-high.
+  Fonts: Instrument Sans (UI and prose), JetBrains Mono (labels, code, numbers).
+  Tokens: see :root. Spacing on a 4px scale. Stage colours: Data blue, Checks violet, Use green, Bypass red.
+  Sources: orderflow repo at main a1b2c3d: svc/engine/**, svc/cli/load_ruleset.py,
+  rulesets/eu_retail/config.yaml, rules.yaml and golden/*.yaml; docs/engine/ENGINE_CONTRACT.md and RULES.md.
+  Note: this reference page is a fictional example. The repo, files, line numbers, rules and orders are invented.
+*/
+:root {
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --surface-2: #f2f0eb;
+  --line: #e2dfd8;
+  --text: #1c1b22;
+  --muted: #5e5c68;
+  --accent: #6d3fd6;
+  --accent-soft: #f2eefb;
+  --st-data: #5b84b8;
+  --st-checks: #7a5cd0;
+  --st-use: #3f8f66;
+  --urgent: #b4372f;
+  --high: #c06a1b;
+  --medium: #8a7a12;
+  --low: #6b6977;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --r: 8px;
+  --f-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --t-xs: 12px; --t-sm: 14px; --t-md: 16px; --t-lg: 20px; --t-xl: 28px; --t-2xl: 40px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: var(--t-md)/1.6 var(--f-sans); }
+h1, h2, h3 { text-wrap: balance; }
+p, li { text-wrap: pretty; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 var(--s4); }
+header.top { padding: var(--s8) 0 var(--s6); border-bottom: 1px solid var(--line); }
+.eyebrow { font: 500 var(--t-xs)/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: var(--t-2xl); line-height: 1.1; margin: var(--s3) 0 var(--s4); letter-spacing: -0.02em; }
+h2 { font-size: var(--t-xl); margin: 0 0 var(--s3); letter-spacing: -0.01em; }
+h3 { font-size: var(--t-lg); margin: var(--s5) 0 var(--s2); }
+.lede { color: var(--muted); font-size: var(--t-lg); line-height: 1.5; margin: 0; max-width: 72ch; }
+.num { font: 500 var(--t-xs)/1 var(--f-mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; display: block; margin-bottom: var(--s2); }
+.prose { max-width: 72ch; }
+.prose p { margin: 0 0 var(--s4); }
+.muted { color: var(--muted); }
+.small { font-size: var(--t-sm); }
+.mono { font-family: var(--f-mono); }
+code { font: 500 0.88em var(--f-mono); background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+
+main section { padding: var(--s7) 0; border-bottom: 1px solid var(--line); scroll-margin-top: 44px; }
+
+/* TL;DR strip */
+.tldr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s4); margin-top: var(--s5); }
+.tldr div { border-top: 3px solid var(--c); padding-top: var(--s2); }
+.tldr b { display: block; font-size: var(--t-sm); }
+.tldr span { font-size: var(--t-sm); color: var(--muted); }
+
+button.btn, .seg button { font: 500 var(--t-sm) var(--f-sans); min-height: 44px; padding: 0 var(--s4); border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: var(--r); cursor: pointer; }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn:disabled { opacity: .45; cursor: not-allowed; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: var(--s1); }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.row { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; margin: var(--s3) 0; }
+label.chk { display: flex; align-items: center; gap: var(--s2); min-height: 40px; cursor: pointer; font-size: var(--t-sm); }
+label.chk input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+
+/* Stage walkthrough. */
+.stages { margin-top: var(--s5); --mid: 320px; --node: 196px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) var(--mid) minmax(0, 1.45fr); gap: 0 var(--s5); min-height: 64vh; }
+.stage-brief, .stage-cards { align-self: center; padding: var(--s6) 0; opacity: .45; transition: opacity .3s ease-out; }
+.stage.is-active .stage-brief, .stage.is-active .stage-cards, .stage:focus-within .stage-cards { opacity: 1; }
+.stage-no { font: 500 var(--t-2xl)/1 var(--f-mono); color: var(--accent); }
+.stage-brief h3 { margin: var(--s3) 0 var(--s2); }
+.stage-brief p { margin: 0 0 var(--s3); }
+
+/* (?) detail panel under each step: closed by default, opens in place in the brief column. */
+.qmore { margin-top: var(--s2); }
+.qmore > summary { list-style: none; display: inline-flex; align-items: center; gap: var(--s2); min-height: 36px; cursor: pointer; font: 500 var(--t-xs)/1 var(--f-mono); color: var(--accent); }
+.qmore > summary::-webkit-details-marker { display: none; }
+.qmore > summary::before { content: "?"; display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--accent); border-radius: 999px; font: 600 12px/1 var(--f-mono); }
+.qmore[open] > summary::before { background: var(--accent); color: #fff; }
+.qmore > summary:hover { text-decoration: underline; }
+.qbody { margin-top: var(--s2); padding: var(--s3) var(--s4); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--r); font-size: var(--t-sm); line-height: 1.55; }
+.qbody h4 { margin: var(--s3) 0 var(--s1); font: 600 var(--t-xs)/1.3 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.qbody h4:first-child { margin-top: 0; }
+.qbody p { margin: 0 0 var(--s2); }
+.qbody ol, .qbody ul { margin: 0 0 var(--s2); padding-left: var(--s5); }
+.qbody li { margin-bottom: var(--s1); }
+.qbody li ul { margin: var(--s1) 0 0; }
+.qbody pre.snip { margin: 0 0 var(--s2); }
+
+/* The (?) opens its panel in a centred dialog so the page layout never shifts; the inline copy stays
+   hidden and is only the source the dialog clones. */
+.qmore .qbody { display: none; }
+dialog.qdialog { width: min(760px, calc(100vw - 32px)); max-height: min(86vh, 900px); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 24px 64px rgba(28, 27, 34, .28); overflow: hidden; }
+dialog.qdialog[open] { display: flex; flex-direction: column; }
+dialog.qdialog::backdrop { background: rgba(28, 27, 34, .45); }
+.qdialog .qhead { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s3) var(--s3) var(--s3) var(--s5); border-bottom: 1px solid var(--line); }
+.qdialog .qhead .eyebrow { display: block; margin-bottom: var(--s1); }
+.qdialog .qhead h3 { margin: 0; font-size: var(--t-lg); }
+.qdialog .qclose { flex: none; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); color: var(--text); font: 500 22px/1 var(--f-sans); cursor: pointer; }
+.qdialog .qclose:hover { border-color: var(--accent); color: var(--accent); }
+.qdialog .qbody { display: block; margin: 0; padding: var(--s4) var(--s5) var(--s5); border: 0; border-radius: 0; overflow-y: auto; font-size: var(--t-md); }
+@media (max-width: 560px) { .qdialog .qbody { padding: var(--s4); } }
+
+.stage-mid { position: relative; display: flex; align-items: center; justify-content: center; }
+.stage-mid::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #c9c6cf; }
+.stage:first-child .stage-mid::before { top: 50%; }
+.stage:last-child .stage-mid::before { bottom: 50%; }
+.stage.fork .stage-mid::before { display: none; }
+.fnode { position: relative; z-index: 1; width: var(--node); padding: var(--s3) var(--s4); text-align: center; border: 1.5px solid var(--c); background: var(--f); border-radius: var(--r); cursor: pointer; font: inherit; color: inherit; transition: box-shadow .25s ease-out, filter .25s ease-out; filter: grayscale(.7) opacity(.999); }
+.fnode b { display: block; font-size: var(--t-md); }
+.fnode span { display: block; font-size: var(--t-xs); color: var(--muted); }
+.fnode .file { font-family: var(--f-mono); margin-top: 2px; }
+.stage.is-active .fnode { filter: none; box-shadow: 0 0 0 3px var(--accent); }
+.stage:not(:first-child) .fnode::before { content: ""; position: absolute; left: 50%; top: -9px; margin-left: -6px; border: 6px solid transparent; border-top: 7px solid #c9c6cf; border-bottom: 0; }
+.fnode.data { --c: #5b84b8; --f: #eef3f9; }
+.fnode.em { --c: #b4372f; --f: #fbefee; }
+.fnode.checks { --c: #7a5cd0; --f: #f2eefb; }
+.fnode.score { --c: #6d3fd6; --f: #f2eefb; }
+.fnode.use { --c: #3f8f66; --f: #edf6f1; }
+.fnode.gap { --c: #8a8794; --f: #ffffff; border-style: dashed; }
+.fnode .flag { margin-top: var(--s2); font: 600 var(--t-xs)/1.3 var(--f-mono); color: var(--c); text-transform: uppercase; letter-spacing: .04em; }
+
+.lane { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #c9c6cf; }
+.lane.l1 { left: 70px; } .lane.l2 { left: 160px; } .lane.l3 { left: 250px; }
+.lane.l3.dashed { background: none; border-left: 2px dashed #c9c6cf; width: 0; }
+.forkbar { position: absolute; left: 70px; width: 180px; height: 2px; background: #c9c6cf; }
+.forkbar.top { top: 0; } .forkbar.bottom { bottom: 0; }
+.stage.fork .stage-mid { justify-content: flex-start; }
+.stage.fork .fnode { width: 112px; padding: var(--s3) var(--s2); position: absolute; top: 50%; transform: translateY(-50%); }
+.fnode.in-l1 { left: 14px; } .fnode.in-l2 { left: 104px; } .fnode.in-l3 { left: 194px; }
+.lane-tag { position: absolute; top: 14px; left: 50%; white-space: nowrap; transform: translateX(-50%); padding: 0 var(--s2); background: var(--bg); text-align: center; font: 500 10px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+.rail { position: absolute; top: 0; bottom: 0; width: 0; }
+.rail.em { left: 6px; border-left: 2px solid #b4372f; }
+.rail.cfg { right: 6px; border-right: 2px dashed #8a8794; }
+.rail.from { top: 50%; }
+.rail.to { bottom: 50%; }
+.rail .stub { position: absolute; width: calc((var(--mid) - var(--node)) / 2 - 6px); height: 0; }
+.rail.em .stub { left: -2px; border-top: 2px solid #b4372f; }
+.rail.cfg .stub { right: -2px; border-top: 2px dashed #8a8794; }
+.rail.from .stub { top: -1px; }
+.rail.to .stub { bottom: -1px; }
+.rail .tag-rail { position: absolute; top: 12px; white-space: nowrap; font: 500 10px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: .04em; writing-mode: vertical-rl; }
+.rail.em .tag-rail { left: -20px; color: #b4372f; }
+.rail.cfg .tag-rail { right: -20px; color: #6b6977; }
+
+/* Reads / Code / Hands on cards. */
+.stage-cards { display: grid; gap: var(--s3); min-width: 0; }
+.io { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: var(--r); padding: var(--s3) var(--s4); min-width: 0; }
+.io .k { font: 500 var(--t-xs)/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--c); }
+.io p { margin: var(--s2) 0 0; font-size: var(--t-sm); }
+.io ul { margin: var(--s2) 0 0; padding-left: var(--s4); font-size: var(--t-sm); }
+.io li { margin-bottom: 2px; }
+.io.in { --c: var(--st-data); }
+.io.proc { --c: var(--st-checks); }
+.io.out { --c: var(--st-use); }
+.io.warn { --c: var(--high); }
+.io.bump { box-shadow: 0 0 0 3px #e7defb; transition: box-shadow .4s ease-out; }
+.ref { font: 500 var(--t-xs)/1.4 var(--f-mono); color: var(--muted); margin-top: var(--s2); }
+pre.snip { margin: var(--s2) 0 0; padding: var(--s2) var(--s3); background: var(--surface-2); border-radius: 6px; font: 400 12px/1.55 var(--f-mono); overflow-x: auto; white-space: pre; color: #2b2933; }
+pre.snip .c { color: #7b7887; }
+pre.snip .kw { color: var(--accent); }
+.pills { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s2); }
+.pills span { font: 500 var(--t-xs)/1.3 var(--f-mono); background: var(--surface-2); border-radius: 999px; padding: 2px var(--s2); }
+
+.stepper { position: fixed; right: var(--s4); top: 50%; transform: translateY(-50%); z-index: 6; display: flex; flex-direction: column; align-items: center; gap: var(--s2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s2); box-shadow: 0 8px 24px rgba(28, 27, 34, .10); opacity: 0; pointer-events: none; transition: opacity .25s ease-out; }
+.stepper.show { opacity: 1; pointer-events: auto; }
+.stepper .count { font: 500 var(--t-xs)/1.3 var(--f-mono); color: var(--muted); text-align: center; }
+.stepper button.btn { width: 112px; }
+
+@media (max-width: 1520px) and (min-width: 1001px) { .stages { padding-right: 136px; } }
+@media (max-width: 1000px) {
+  .stage { grid-template-columns: 1fr; min-height: 0; }
+  .stage-mid { order: -1; padding: var(--s4) 0; min-height: 90px; }
+  .stage-brief, .stage-cards { padding: var(--s3) 0; opacity: 1; }
+  .rail, .lane, .forkbar, .lane-tag { display: none; }
+  .stage.fork .fnode { position: relative; transform: none; left: auto; width: var(--node); }
+  .stage.fork .stage-mid { justify-content: center; }
+  .stepper { display: none; }
+}
+
+/* Combiner playground */
+.play { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--s5); margin-top: var(--s5); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s5); min-width: 0; }
+.panel h3:first-child { margin-top: 0; }
+.fl { list-style: none; padding: 0; margin: var(--s2) 0 0; }
+.fl li { border-top: 1px solid var(--surface-2); }
+.fl li:first-child { border-top: 0; }
+.fl label.chk { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; }
+.fl .rid { font: 600 var(--t-sm) var(--f-mono); }
+.fl .meta { display: block; font: 400 var(--t-xs)/1.4 var(--f-mono); color: var(--muted); }
+.fl .pts { font: 500 var(--t-xs) var(--f-mono); color: var(--muted); white-space: nowrap; }
+.sub { font: 500 var(--t-xs)/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: var(--s4) 0 0; }
+.big { font: 600 40px/1 var(--f-mono); letter-spacing: -0.02em; }
+.bandpill { display: inline-block; font: 600 var(--t-sm) var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: #fff; padding: var(--s1) var(--s3); border-radius: 999px; margin-left: var(--s3); vertical-align: middle; }
+.heads { width: 100%; border-collapse: collapse; font-size: var(--t-sm); margin-top: var(--s3); }
+.heads th, .heads td { padding: var(--s1) var(--s2); border-bottom: 1px solid var(--surface-2); text-align: right; font-family: var(--f-mono); }
+.heads th { font: 500 var(--t-xs) var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.heads td:first-child, .heads th:first-child { text-align: left; font-family: var(--f-sans); }
+.res { list-style: none; margin: var(--s2) 0 0; padding: 0; font-size: var(--t-sm); }
+.res li { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: var(--s2); padding: var(--s1) 0; border-top: 1px solid var(--surface-2); }
+.res li:first-child { border-top: 0; }
+.res .st { font: 600 var(--t-xs)/1.6 var(--f-mono); text-transform: uppercase; }
+.st.counted { color: var(--st-use); } .st.dropped { color: var(--muted); } .st.shadow { color: var(--accent); } .st.floor { color: var(--high); }
+.res .pts { font: 500 var(--t-xs)/1.6 var(--f-mono); color: var(--muted); white-space: nowrap; }
+.trace { margin: var(--s2) 0 0; padding: var(--s2) var(--s3); background: var(--surface-2); border-radius: 6px; font: 400 12px/1.6 var(--f-mono); list-style: none; }
+.trace li::before { content: "> "; color: var(--muted); }
+.ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s1); margin-top: var(--s3); font-size: var(--t-xs); }
+.ladder div { border-top: 3px solid; padding: var(--s1) var(--s2); background: var(--surface-2); opacity: .5; }
+.ladder div.on { opacity: 1; background: var(--surface); font-weight: 600; }
+.note { font-size: var(--t-xs); color: var(--muted); margin-top: var(--s3); }
+
+/* Status */
+.status { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); margin: var(--s4) 0; }
+.status div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s4); }
+.status b { display: block; }
+.status .st { font: 500 var(--t-xs) var(--f-mono); text-transform: uppercase; letter-spacing: .06em; }
+.status p { margin: var(--s2) 0 0; font-size: var(--t-sm); color: var(--muted); }
+.checks { margin: var(--s4) 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.checks summary { display: flex; align-items: center; gap: var(--s3); min-height: 44px; padding: 0 var(--s4); font-weight: 600; cursor: pointer; list-style: none; }
+.checks summary::-webkit-details-marker { display: none; }
+.checks summary::before { content: "+"; font: 500 var(--t-md)/1 var(--f-mono); color: var(--accent); width: 1ch; }
+.checks[open] summary::before { content: "\2212"; }
+.checks summary:hover { color: var(--accent); }
+.checks .tablewrap { padding: 0 var(--s4) var(--s4); overflow-x: auto; }
+.checks table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.checks th, .checks td { text-align: left; padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); vertical-align: top; }
+.checks th { font: 500 var(--t-xs) var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.checks td:first-child { font-family: var(--f-mono); white-space: nowrap; color: var(--muted); }
+.checks ul { margin: 0; padding: 0 var(--s4) var(--s4) var(--s6); font-size: var(--t-sm); }
+.checks li { margin-bottom: var(--s2); }
+footer { padding: var(--s6) 0 var(--s8); color: var(--muted); font-size: var(--t-sm); }
+
+@media (max-width: 860px) {
+  .tldr { grid-template-columns: 1fr 1fr; }
+  .play { grid-template-columns: 1fr; }
+  .status { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  h1 { font-size: var(--t-xl); }
+  .tldr { grid-template-columns: 1fr; }
+  .panel { padding: var(--s4); }
+  .res li { grid-template-columns: 1fr auto; }
+  .res li .st { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <span class="eyebrow">Fulfilment priority engine, architecture v1</span>
+    <h1>One engine run, from ruleset version to ranked pick list</h1>
+    <p class="lede">The rules are data and the engine is code. A versioned ruleset says what to check and how much it counts; a pure <code>evaluate()</code> turns each open order's records into findings, a score, a band and a pick action. This page follows one nightly batch run through the code.</p>
+    <div class="tldr">
+      <div style="--c:var(--st-data)"><b>Ruleset in, numbers out of code</b><span>Every threshold, cap and cut-off lives in <code>rulesets/&lt;ruleset&gt;/</code>, with a <code>source:</code>.</span></div>
+      <div style="--c:var(--urgent)"><b>Hard stops first</b><span>Outside the score, outside cohort, tier and holds. Cannot be switched off.</span></div>
+      <div style="--c:var(--st-checks)"><b>Templates, not one-off code</b><span>14 registered templates (one of them, <code>custom</code>, dispatches to 2 functions) run 42 ruleset entries.</span></div>
+      <div style="--c:var(--st-use)"><b>One pure combiner</b><span>Count once, cap, band, floor, action. Every step leaves a trace line.</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="run">
+    <span class="num">The run, stage by stage</span>
+    <h2>Follow one batch run down the flow</h2>
+    <p class="prose muted">Scroll, or use Next on the right. The flowchart runs down the middle; the red rail on the left is the hard-stop path, which skips the score; the dashed rail on the right is the frozen ruleset config, read by every stage from 02 to 08. Each stage lists what it reads, the code that does it (with excerpts and <code>file:line</code>), and what it hands on. Paths are relative to <code>orderflow/</code>; the engine lives in <code>svc/engine/</code>.</p>
+
+    <div class="stages" id="stages">
+
+      <!-- 01 Ruleset -->
+      <div class="stage" data-label="01">
+        <div class="stage-brief">
+          <div class="stage-no">01</div>
+          <h3>A ruleset version becomes effective</h3>
+          <p>Before any run, <code>load-ruleset</code> reads a ruleset folder, validates it, runs its whole-order golden cases and stores it as an immutable version. Only a version whose golden cases all pass becomes effective.</p>
+          <p class="small muted">EU retail (<code>eu_retail</code>) and US wholesale (<code>us_wholesale</code>) have the same file set. EU retail's <code>rules.yaml</code> is <code>EU-RETAIL</code> version 1.4.2.</p>
+          <details class="qmore"><summary>Details: load-ruleset and immutable versions</summary><div class="qbody">
+            <h4>Usage</h4>
+<pre class="snip">python -m svc.cli.load_ruleset rulesets/eu_retail
+python -m svc.cli.load_ruleset rulesets/eu_retail --effective-from 2026-11-03 --approved-by "Ops review" --note "..."</pre>
+            <p><code>--effective-from</code> defaults to today; <code>--approved-by</code> and <code>--note</code> are optional. A path is taken as given, or relative to the repo root.</p>
+            <h4>What load() does (svc/cli/load_ruleset.py:38)</h4>
+            <ol>
+              <li><b>Validate and hash.</b> <code>load_ruleset(ruleset_dir)</code> (engine/ruleset.py) checks the ruleset and computes its SHA-256.</li>
+              <li><b>Run golden cases.</b> <code>run_golden</code> runs <code>&lt;ruleset&gt;/golden/*.yaml</code> against the ruleset's config, on the stub engine.</li>
+              <li><b>Store the version</b> with <code>store_version</code> (ruleset_store.py:174), in one database session.
+                <ul>
+                  <li>An open draft for the ruleset blocks the load.</li>
+                  <li>The same version label with the same content returns the stored version unchanged; with different content it is refused.</li>
+                  <li>Rows go in while the version is a draft. Then the golden summary decides: all passed, the version becomes effective and records who approved it and when; otherwise it is stored, not effective, with the failing cases.</li>
+                </ul></li>
+              <li><b>Audit.</b> A new version gets a <code>config.version_loaded</code> audit row with its SHA-256 and whether it is effective.</li>
+              <li><b>Commit</b> everything in one transaction.</li>
+            </ol>
+            <p>It prints one line for the version and a pass or FAIL line per golden case. Exit code 0 only if the version is effective; a refusal, a missing folder or a not-effective version all exit 1.</p>
+            <h4>What "immutable version" means</h4>
+            <ul>
+              <li><b>A stored version is never edited.</b> Loading a known label with different content fails with "published versions cannot be edited, give the change a new version". A change always means a new version label, with its own hash, golden result and approval.</li>
+              <li><b>Every read is checked.</b> <code>read_version</code> rebuilds the ruleset from its rows, re-hashes it, and refuses to run if the hash differs from the stored one (ruleset_store.py:291). Because content cannot change, <code>load_config</code> caches the frozen <code>Config</code> by version ID and hash.</li>
+              <li><b>Every run points at one.</b> Each <code>engine.run</code> row records the config version ID and its SHA-256, so any finding traces back to the exact numbers that produced it.</li>
+            </ul>
+            <h4>Why it is built this way</h4>
+            <ul>
+              <li>A priority has to be reproducible and explainable later: "this order was Rush under EU-RETAIL 1.4.2" only means something if 1.4.2 cannot change afterwards.</li>
+              <li>Every business number lives in the ruleset, so editing a version in place would change warehouse behaviour with no review and no record of who approved it.</li>
+              <li>Effective dates choose between stable versions: a run picks the newest effective version whose effective date is on or before the run date.</li>
+              <li>The hash check catches the common slip of editing the YAML and reloading without bumping the version.</li>
+            </ul>
+            <h4>Things to know</h4>
+            <ul>
+              <li>It writes to the database, so treat running it as a change that needs sign-off, not a read.</li>
+              <li>A ruleset with no golden cases can never become effective: the summary needs at least one result, all passing.</li>
+            </ul>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail cfg from"><span class="stub"></span><span class="tag-rail">frozen ruleset config</span></div>
+          <button class="fnode data" type="button"><b>Ruleset version</b><span>load-ruleset, validate, store</span><span class="file">ruleset.py, ruleset_store.py</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p><code>config.yaml</code> and <code>rules.yaml</code> (required), <code>carriers.yaml</code>, <code>sla.yaml</code>, and the field IDs in the data dictionary.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+            <ul>
+              <li>Every <code>requires</code> field ID must exist in the dictionary; every number must have a <code>source:</code> (<code>unsourced_numbers</code>, ruleset.py:188).</li>
+              <li>Hard stops cannot be disabled: status must be <code>live</code> (ruleset.py:301).</li>
+              <li>Content is hashed (SHA-256) and stored; a matching re-read is required later.</li>
+            </ul>
+<pre class="snip">    rv = load_ruleset(ruleset_dir)
+    golden = run_golden(ruleset_dir, rv.config())</pre>
+            <div class="ref">svc/cli/load_ruleset.py:46-47</div>
+<pre class="snip">    <span class="kw">if</span> summary[<span class="c">"passed"</span>]:
+        version.effective = True
+        version.state = EFFECTIVE</pre>
+            <div class="ref">svc/engine/ruleset_store.py:219-221</div>
+          </div>
+          <div class="io warn"><span class="k">Watch</span>
+            <ul>
+              <li><code>load-ruleset</code> only checks that each live or shadow rule <em>has</em> tests (ruleset.py:412-419). The per-rule tests run under pytest, not at load time.</li>
+              <li>Golden cases always run on the stub engine (golden.py:52), whatever <code>ENGINE_IMPL</code> says.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 Runner -->
+      <div class="stage" data-label="02">
+        <div class="stage-brief">
+          <div class="stage-no">02</div>
+          <h3>A run starts</h3>
+          <p>The runner picks the open orders for the ruleset's warehouses, resolves the version in effect on the run date, and reads every order's <code>core.*</code> rows. It is the only part that touches the database.</p>
+          <details class="qmore"><summary>Details: execute_run</summary><div class="qbody">
+            <h4>What execute_run() does (svc/engine/runner.py:361)</h4>
+            <ol>
+              <li><b>Pick the orders.</b> Batch mode: every open order routed to a warehouse of this ruleset, optionally only some warehouses. Single mode: the order IDs given.</li>
+              <li><b>Resolve the version.</b> <code>effective_version</code> takes the newest effective version with an effective date on or before the run date; none raises <code>NoEffectiveVersionError</code>. <code>load_config</code> rebuilds and hash-checks it.</li>
+              <li><b>Open the run record.</b> An <code>engine.run</code> row with the config version ID and SHA-256, engine implementation, mode, run date, a snapshot of every rule's ID, version and status, who triggered it, and the job ID.</li>
+              <li><b>Evaluate</b> with <code>evaluate_orders</code> (runner.py:312):
+                <ul>
+                  <li>reads every order's rows in the warehouse's time zone;</li>
+                  <li>adds the hard-stop event keys already raised on earlier run dates, so a hard stop is raised once;</li>
+                  <li>builds each snapshot (a missing config key fails the run; any other error fails only that order);</li>
+                  <li>if AN-P04 runs, attaches a peer table built from the batch's own orders;</li>
+                  <li>calls the engine chosen by <code>ENGINE_IMPL</code>.</li>
+                </ul></li>
+              <li><b>Write the results</b> (stage 09) and set the status: <code>succeeded</code>, <code>partial</code> (some orders errored) or <code>failed</code> (nothing scored). Commit.</li>
+            </ol>
+            <h4>Other pieces</h4>
+            <ul>
+              <li><code>evaluate_orders</code> writes nothing, so the admin impact preview uses it as a dry run.</li>
+              <li>On a config or engine failure, <code>fail()</code> records the run as failed, with its errors, before raising <code>RunFailedError</code>.</li>
+            </ul>
+            <h4>Why it is built this way</h4>
+            <p>Keeping all database work here is what lets the engine itself stay pure: the same snapshots, config and date always give the same result, which golden cases and the preview rely on.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail cfg"></div>
+          <button class="fnode data" type="button"><b>Runner</b><span>execute_run</span><span class="file">runner.py</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>Ruleset ID, run date, optional order or warehouse filter; <code>effective_version</code> and <code>load_config</code> from the ruleset store.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    version = <span class="kw">await</span> effective_version(session, ruleset_id, run_date)
+    cfg: Config = <span class="kw">await</span> load_config(session, version)</pre>
+            <div class="ref">svc/engine/runner.py:388-389 (execute_run starts at :361)</div>
+          </div>
+          <div class="io out"><span class="k">Hands on</span>
+            <p>An <code>engine.run</code> row (config version and SHA, engine impl, a snapshot of rule IDs, versions and statuses), then one row bundle per order to the snapshot builder.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 Snapshot -->
+      <div class="stage" data-label="03">
+        <div class="stage-brief">
+          <div class="stage-no">03</div>
+          <h3>One frozen snapshot per order</h3>
+          <p><code>build_snapshot(rows, cfg, as_of)</code> applies the valid-line rules once, so every rule sees the same facts. It also works out the account tier and the active holds.</p>
+          <p class="small muted">Pure and deterministic: the same rows and date always give the same snapshot.</p>
+          <details class="qmore"><summary>Details: build_snapshot</summary><div class="qbody">
+            <h4>What build_snapshot() does (svc/engine/snapshot.py:512)</h4>
+            <ol>
+              <li><b>Takes plain row sections</b> keyed by dictionary ID: order lines, payments, shipments, carrier events, stock levels, support tickets, returns and flags. Every row carries <code>arrived_at</code>, when it first reached the store.</li>
+              <li><b>Applies the valid-line rules once:</b> drops rows dated or arriving after <code>as_of</code>, cancelled, or with an unparsed SKU; converts weights to canonical units; drops impossible quantities; keeps extreme-but-possible quantities flagged verify-now. Each rejected row becomes a data-quality item.</li>
+              <li><b>Sets the account tier.</b> Tier B when any account-history collection exists (past orders, tickets, returns); guest checkout data only gives Tier A (config <code>tier.b_when_any_of</code>).</li>
+              <li><b>Collects holds</b> with an expiry and a scope: HOLD-01 customer-requested delay, split shipment pending, pre-order. Task-only holds (address unconfirmed) pass straight through to the priority.</li>
+              <li><b>Returns a frozen <code>OrderSnapshot</code></b>, which also carries the hard-stop keys raised earlier and any injected findings.</li>
+            </ol>
+            <h4>Things to know</h4>
+            <ul>
+              <li>Holds never touch hard stops or floors (config <code>never_kinds: [hard_stop, floor]</code>).</li>
+              <li>An unknown row source raises <code>ConfigKeyError</code>, which fails the whole run, not just the order.</li>
+            </ul>
+            <h4>Why it is built this way</h4>
+            <p>If every rule checked validity for itself, two rules could disagree about the same order line. Doing it once means every rule, the anomaly checks and the hard-stop path see exactly the same facts.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail cfg"></div>
+          <button class="fnode data" type="button"><b>Order snapshot</b><span>build_snapshot</span><span class="file">snapshot.py</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>One order's raw rows keyed by dictionary ID, plus <code>valid.*</code>, <code>units.*</code>, <code>tier.*</code> and <code>holds.*</code> from config.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+            <ul>
+              <li>Drops rows after <code>as_of</code>, cancelled, unparsed, or in an unknown unit; converts units by factor.</li>
+              <li>Impossible quantities are dropped; implausible ones are kept and flagged verify-now. Each rejection becomes a data-quality item.</li>
+              <li>Holds: HOLD-01 customer-requested delay (when live and F07 is set), split shipment pending, pre-order.</li>
+            </ul>
+<pre class="snip">    <span class="kw">if</span> cfg.has_rule(<span class="c">"HOLD-01"</span>) <span class="kw">and</span> cfg.rule(<span class="c">"HOLD-01"</span>).status == <span class="c">"live"</span> <span class="kw">and</span> order.get(<span class="c">"F07"</span>):
+        sec = cfg.section((<span class="c">"holds"</span>, <span class="c">"HOLD-01"</span>))</pre>
+            <div class="ref">svc/engine/snapshot.py:448-449 (build_snapshot at :512)</div>
+          </div>
+          <div class="io warn"><span class="k">Watch</span>
+            <p>HOLD-02 is registered as <code>later</code> with <code>template: pending</code>; only HOLD-01 is implemented.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 Engine entry -->
+      <div class="stage" data-label="04">
+        <div class="stage-brief">
+          <div class="stage-no">04</div>
+          <h3>The engine contract</h3>
+          <p>The runner calls <code>evaluate(snapshots, cfg, as_of) -&gt; EngineResult</code>. It must be pure: no I/O, no clock, no database. A setting picks the in-repo engine or an external one.</p>
+          <p class="small muted"><code>Config</code> is frozen and has no defaults: any missing key raises <code>ConfigKeyError</code> and fails the whole run. Any other error fails one order only.</p>
+          <details class="qmore"><summary>Details: the switch, stub and check_runtime</summary><div class="qbody">
+            <h4>How the engine is chosen (svc/engine/switch.py:18)</h4>
+            <ul>
+              <li><code>ENGINE_IMPL</code> defaults to <code>stub</code> (svc/core/settings.py:24). Any value other than <code>stub</code> or <code>real</code> raises an error.</li>
+              <li><code>real</code> imports <code>orderflow_engine</code> when called. If the package is missing it fails with "real engine not installed", and a result that is not an <code>EngineResult</code> is refused.</li>
+            </ul>
+            <h4>What stub.evaluate() does (svc/engine/stub.py:47)</h4>
+            <ol>
+              <li><b><code>check_runtime</code></b> (evaluate.py:98): for every rule that will run, its template is registered, its required params resolve, its custom function or anomaly check exists, and a hard stop has its acknowledgement and routing settings. The rule order must have no cycle. Any gap fails the run before anything is scored.</li>
+              <li><b>Per order</b>, <code>evaluate_order</code>: hard stops, rules, findings, combiner. A snapshot built for a different date is an error for that order.</li>
+              <li><b>Errors.</b> <code>ConfigKeyError</code> is re-raised and stops the run; anything else becomes an <code>OrderError</code> and the batch carries on.</li>
+              <li><b>Ranks</b> the priorities by warehouse and returns an <code>EngineResult</code>: engine impl and version, ruleset ID, config version and hash, date, findings, priorities, hard stops and errors.</li>
+            </ol>
+            <h4>Why it is built this way</h4>
+            <ul>
+              <li>Pure functions are what make golden cases, the dry-run preview and the stub-or-real swap possible.</li>
+              <li>A missing config key is a ruleset problem that affects every order, so it stops the run; a bad record is one order's problem, so it does not.</li>
+            </ul>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail cfg"></div>
+          <button class="fnode checks" type="button"><b>evaluate()</b><span>stub or real</span><span class="file">switch.py, stub.py</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p><code>settings.ENGINE_IMPL</code>: <code>"stub"</code> (default) or <code>"real"</code>, which imports an external package, <code>orderflow_engine</code>, not in the repo.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    <span class="kw">if</span> impl == stub.ENGINE_IMPL:
+        <span class="kw">return</span> stub.evaluate
+    <span class="kw">if</span> impl == real.ENGINE_IMPL:
+        <span class="kw">return</span> real.evaluate</pre>
+            <div class="ref">svc/engine/switch.py:20-23</div>
+<pre class="snip">    check_runtime(cfg)  <span class="c"># a missing key fails the run before anything is scored</span></pre>
+            <div class="ref">svc/engine/stub.py:48 (check_runtime at evaluate.py:98)</div>
+          </div>
+          <div class="io out"><span class="k">Hands on</span>
+            <p>Per order, in this order: hard stops, then rules, then findings, then the combiner (<code>evaluate_order</code>, stub.py:31). <code>check_runtime</code> has already confirmed every running rule's template, params and hard-stop settings resolve.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 Hard stops -->
+      <div class="stage" data-label="05">
+        <div class="stage-brief">
+          <div class="stage-no">05</div>
+          <h3>Hard stops first</h3>
+          <p>Every non-<code>later</code> hard-stop rule runs before scoring, without the cohort filter, tier gate or holds. Each outcome carries routing and an acknowledgement deadline from config. Hard stops are never scored.</p>
+          <p class="small muted">EU retail has 4 hard-stop entries: 3 live, 1 later.</p>
+          <details class="qmore"><summary>Details: the hard-stop path</summary><div class="qbody">
+            <h4>What run_hard_stops() does (svc/engine/evaluate.py:262)</h4>
+            <ol>
+              <li><b>Runs every hard-stop rule</b> except <code>later</code> ones (<code>hard_stop_drafts</code>, :251), calling the template directly: no cohort filter, tier gate or hold check. The templates are <code>stop_threshold</code> and <code>flag_value</code>, and their drafts carry 0 points.</li>
+              <li><b>Sets a disposition</b> (<code>stop_disposition</code>, templates/base.py:301). Inside the look-back, by how old the signal was when it arrived: fresh is a <code>hold</code>, up to <code>stop.late.verify_now_max_age_hours</code> is <code>verify_now</code>, older is a <code>review_task</code>.</li>
+              <li><b>Raises each event once.</b> Keys raised in earlier runs or already in this run are skipped.</li>
+              <li><b>Adds routing and a deadline</b> from <code>stop.routing.&lt;id&gt;</code> and <code>stop.ack_minutes.&lt;id&gt;</code>.</li>
+              <li><b>Second pass:</b> a <code>VERIFY</code> outcome for each extreme quantity flagged by the snapshot builder.</li>
+            </ol>
+            <h4>Other pieces</h4>
+            <ul>
+              <li>The runner writes one obligation per order, rule and event key, and reports overdue ones without moving them.</li>
+              <li>In the combiner, any hard-stop outcome sets the action to <code>hold_and_escalate</code> and marks the priority as stopped. It never adds points.</li>
+            </ul>
+            <h4>Why they cannot be switched off</h4>
+            <p>Two guards: ruleset validation refuses a hard stop whose status is not <code>live</code> (ruleset.py:301; <code>later</code> only if listed as a later hard stop), and the in-app config drafts refuse the same change (drafts.py:142). A suspected-fraud or export-restricted order must reach a person whatever the score, the tier or any hold says.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail em from"><span class="stub"></span><span class="tag-rail">skips the score</span></div>
+          <div class="rail cfg"></div>
+          <button class="fnode em" type="button"><b>Hard stops</b><span>run_hard_stops</span><span class="file">evaluate.py</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>All lines including verify-now ones, payment risk flags, <code>snapshot.raised_event_keys</code> from earlier runs, and <code>stop.*</code> config.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    <span class="kw">for</span> entry, d <span class="kw">in</span> hard_stop_drafts(snapshot, cfg):
+        <span class="kw">if</span> d.event_key <span class="kw">in</span> seen <span class="kw">or</span> d.disposition <span class="kw">is</span> None ...:
+            <span class="kw">continue</span>
+        seen.add(d.event_key)</pre>
+            <div class="ref">svc/engine/evaluate.py:270-273 (trimmed)</div>
+          </div>
+          <div class="io out"><span class="k">Hands on</span>
+            <p>One <code>HardStopOutcome</code> per event key, with disposition <code>hold</code>, <code>verify_now</code> or <code>review_task</code>. A second pass adds <code>VERIFY</code> outcomes for extreme quantities. The combiner only uses them to set the hard-stop action.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 06a Template rules -->
+      <div class="stage fork" data-label="06a">
+        <div class="stage-brief">
+          <div class="stage-no">06a</div>
+          <h3>Template rules</h3>
+          <p>Rules run in dependency order (a floor or <code>shares_with</code> target first, otherwise file order). Each rule passes four gates: cohort, account tier, the template itself, then holds.</p>
+          <p class="small muted">Off and later rules never run. Shadow rules run and record findings, but score 0 in the combiner.</p>
+          <details class="qmore"><summary>Details: rule order, gates and templates</summary><div class="qbody">
+            <h4>Rule order (svc/engine/evaluate.py:66)</h4>
+            <ul>
+              <li>Keeps rules that are not hard stops, not <code>off</code> or <code>later</code>, and not holds.</li>
+              <li>Runs a rule's dependencies first: rules named in its params or <code>applies_to</code>, and the target of <code>shares_with</code>. Otherwise file order. A cycle raises <code>ConfigKeyError</code>. The order is cached per ruleset, version and hash.</li>
+            </ul>
+            <h4>What run_rule() does (evaluate.py:214)</h4>
+            <ol>
+              <li><b>Cohort.</b> <code>applies_to</code> can test channel, region, basket value at or above / below, item category, another rule having fired, or any of these. Outside the cohort, the rule is skipped and nothing is stored.</li>
+              <li><b>Tier.</b> If the rule needs more data than the order's tier has, it is not assessed.</li>
+              <li><b>Template.</b> The registered function runs on the snapshot, the params and earlier outcomes.</li>
+              <li><b>Holds</b>, only if it fired. A hold whose scope matches the rule turns it into a stored not-applicable. Evidence that arrived after the hold was set is never held back.</li>
+              <li>A fire with no drafts becomes <code>Clear</code>.</li>
+            </ol>
+            <h4>The template registry (templates/base.py:121)</h4>
+            <ul>
+              <li>Each template registers with <code>@register</code>: required and optional params, reason placeholders, the event-key families it supports, and whether it scores, is a hard stop or is a floor. A name registered twice is an error.</li>
+              <li>Ruleset validation uses the same registry to check each rule, so a rule cannot ask for params its template does not take.</li>
+              <li><code>custom</code> dispatches on <code>params.function</code> to a second registry: <code>split_shipment_ladder</code> and <code>hazmat_carrier_check</code>.</li>
+            </ul>
+            <h4>Why templates</h4>
+            <p>42 ruleset entries share 14 templates. Writing each rule as data on a tested template keeps the numbers in the ruleset, where operations reviews them, and leaves new code only for logic that genuinely does not fit.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <span class="forkbar top"></span>
+          <div class="lane l1"></div><div class="lane l2"></div><div class="lane l3 dashed"></div>
+          <div class="rail em"></div>
+          <div class="rail cfg"></div>
+          <span class="lane-tag">three sources of findings</span>
+          <button class="fnode checks in-l1" type="button"><b>Rules</b><span>14 templates</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>The <code>OrderSnapshot</code>, the rule's <code>params</code>, and the outcomes of rules already run (<code>prior</code>).</p>
+            <div class="pills"><span>latest_event</span><span>stale_stock</span><span>sla_gap</span><span>ticket_open</span><span>carrier_exception</span><span>has_history</span><span>value_tier</span><span>floor</span><span>custom</span><span>+5 more</span></div>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    outcome = TEMPLATES[entry.template].fn(ctx)
+    <span class="kw">if</span> isinstance(outcome, Fired) <span class="kw">and</span> outcome.drafts:
+        h = held_by(entry, snapshot, cfg, outcome.drafts)
+        <span class="kw">if</span> h <span class="kw">is not</span> None:
+            <span class="kw">return</span> NotApplicable(f<span class="c">"held by {h.id} ..."</span>)</pre>
+            <div class="ref">svc/engine/evaluate.py:223-227 (run_rule; the cohort and tier gates are :218-222)</div>
+          </div>
+          <div class="io out"><span class="k">Hands on</span>
+            <p>One outcome per rule: <code>Fired</code> (with drafts), <code>Clear</code>, <code>NotAssessed</code> (missing data or tier too low) or <code>NotApplicable</code>. Missing data is never read as fine.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 06b Anomaly checks -->
+      <div class="stage fork" data-label="06b">
+        <div class="stage-brief">
+          <div class="stage-no">06b</div>
+          <h3>Anomaly checks</h3>
+          <p>The order-level checks AN-P01 to AN-P05 run as rules through the <code>stat</code> template, mapped to the signal head. Four are shadow and AN-P05 is off.</p>
+          <p class="small muted">Each flag records whether a live rule already scored the same event (<code>counted_by_rule</code>).</p>
+          <details class="qmore"><summary>Details: the stat template</summary><div class="qbody">
+            <h4>What the stat template does (svc/engine/templates/stat.py:44)</h4>
+            <ol>
+              <li><b>Runs the check</b> for the rule ID: <code>run_check(snapshot, cfg, rule_id)</code> looks it up in <code>STAT_CHECKS</code> (svc/engine/stats/), with settings from the ruleset's <code>stats:</code> section.</li>
+              <li><b>Turns each flagged item into a draft</b> at 0 points with a <code>signal:</code> event key.</li>
+              <li><b>Marks overlap.</b> If a live, non-signal rule already scored the same event for this order, the draft records <code>counted_by_rule</code> with the lowest such rule ID.</li>
+              <li>No flags but some items clear gives <code>Clear</code>; only not-assessed items gives <code>NotAssessed</code> with the missing fields.</li>
+            </ol>
+            <h4>The five checks</h4>
+            <p>AN-P01 basket far above the customer's usual, AN-P02 carrier transit time drifting, AN-P03 repeated address edits, AN-P04 slower than similar orders, AN-P05 return rate rising (off: no returns feed yet).</p>
+            <h4>Things to know</h4>
+            <ul>
+              <li>The stats API calls the same <code>run_check</code>, so a chart on the order page always matches the stored finding.</li>
+              <li>AN-P04 needs a peer table, which the runner builds per batch (stage 02).</li>
+            </ul>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="lane l1"></div><div class="lane l2"></div><div class="lane l3 dashed"></div>
+          <div class="rail em"></div>
+          <div class="rail cfg"></div>
+          <button class="fnode checks in-l2" type="button"><b>Anomaly checks</b><span>5, shadow</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>The snapshot, the ruleset's <code>stats.&lt;rule ID&gt;</code> settings, and (AN-P04) a peer table the runner builds from the batch.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">@register(<span class="c">"stat"</span>, required=(), event_keys=(<span class="c">"signal"</span>,), scores=False, validate=_validate)</pre>
+            <div class="ref">svc/engine/templates/stat.py:44; checks in svc/engine/stats/p01..p05</div>
+<pre class="snip">                points=0, event_key=build_key(ctx), ...</pre>
+            <div class="ref">svc/engine/templates/stat.py:59</div>
+          </div>
+          <div class="io warn"><span class="k">Watch</span>
+            <p>Anomaly drafts are created at 0 points, so even a live check adds nothing until a points rule is designed and approved.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 06c Injected -->
+      <div class="stage fork" data-label="06c">
+        <div class="stage-brief">
+          <div class="stage-no">06c</div>
+          <h3>Injected signals and ML</h3>
+          <p>The snapshot can carry <code>injected_findings</code> from other engines (anomaly or ML signals). They are appended after the rule findings and go to the combiner as they are.</p>
+          <p class="small muted">The dashed lane marks a path that exists in the contract but carries nothing in a normal run.</p>
+          <details class="qmore"><summary>Details: injected findings</summary><div class="qbody">
+            <h4>What happens to an injected finding</h4>
+            <ol>
+              <li><b>Built in the snapshot</b> by <code>_injected</code> (svc/engine/snapshot.py:490): a <code>Finding</code> in state <code>fired</code>, with the rule ID, kind, head, points, event key and reason given in the row. Status defaults to <code>shadow</code>.</li>
+              <li><b>Appended</b> after the rule findings in <code>to_findings</code> (evaluate.py:433), unchanged.</li>
+              <li><b>Combined</b> like any other finding. Shadow scores 0; a live one in the signal head would count, up to the tier's signal cap (Tier B 10, Tier A 0), and only the highest signal is kept.</li>
+            </ol>
+            <h4>Who fills it today</h4>
+            <ul>
+              <li>Test fixtures only: the rule test kit (casekit.py:203) and the golden files, such as AN-P02 at 3 points in shadow in worked example 1.</li>
+              <li>The runner's row loader never sets it, and no code feeds <code>engine.prediction</code> rows into it.</li>
+            </ul>
+            <h4>Why it exists</h4>
+            <p>It is the contract's slot for findings from another engine, such as a delivery-delay model, without changing the rules path. Wiring it is a decision for the ML work, and it sits behind a review-only stage either way.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <span class="forkbar bottom"></span>
+          <div class="lane l1"></div><div class="lane l2"></div><div class="lane l3 dashed"></div>
+          <div class="rail em"></div>
+          <div class="rail cfg"></div>
+          <button class="fnode gap in-l3" type="button"><b>Injected</b><span>tests only</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p><code>rows["injected_findings"]</code>, turned into fired findings (default status shadow) by <code>_injected</code>, snapshot.py:490.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    findings.extend(snapshot.injected_findings)</pre>
+            <div class="ref">svc/engine/evaluate.py:433</div>
+          </div>
+          <div class="io warn"><span class="k">Not wired</span>
+            <ul>
+              <li>Only test fixtures fill it: the rule test kit (casekit.py:203) and golden files. The runner's row loader never does.</li>
+              <li>The <code>engine.prediction</code> table exists, but no code feeds predictions to the combiner.</li>
+              <li>The ruleset's <code>signal:</code> block (<code>mode: shadow</code>, <code>slot: highest_single</code>) is not read; the combiner hard-codes both.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 07 Findings -->
+      <div class="stage" data-label="07">
+        <div class="stage-brief">
+          <div class="stage-no">07</div>
+          <h3>Outcomes become findings</h3>
+          <p>The three lanes rejoin. Each fired draft becomes one <code>Finding</code> that records rule ID and version, head, points, event key, reason text and evidence row IDs. Not-assessed outcomes become 0-point findings that name the missing fields.</p>
+          <details class="qmore"><summary>Details: to_findings</summary><div class="qbody">
+            <h4>How each outcome is recorded (svc/engine/evaluate.py:381)</h4>
+            <ul>
+              <li><b>Fired:</b> one <code>fired</code> finding per draft, with raw points, event key, reason, evidence, severity, days late and any floor band and action. Counted points stay 0 until the combiner fills them. The rule's head is marked assessed.</li>
+              <li><b>Clear:</b> no row, but the head is marked assessed.</li>
+              <li><b>Not assessed:</b> a 0-point row, reason "Not assessed: ...", listing the missing field IDs.</li>
+              <li><b>Not applicable, not a cohort miss</b> (for example, held): a 0-point <code>not_applicable</code> row with the reason.</li>
+              <li><b>Cohort miss:</b> nothing stored.</li>
+            </ul>
+            <p>Injected findings are appended last. The set of assessed heads goes to the combiner for the coverage line ("delay, service, value assessed; signal shadow").</p>
+            <h4>Things to know</h4>
+            <ul>
+              <li>A placeholder the draft does not supply renders as empty text rather than failing the run.</li>
+              <li>Event-key strings come only from <code>keys.py</code> helpers, so two rules that see the same shipment, ticket or stock reading produce the same key.</li>
+            </ul>
+            <h4>Why record misses and gaps</h4>
+            <p>"Not assessed" is a data gap to close, never a sign that the order is fine. Storing it lets staff and the coverage line see what the score could not look at.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail em"></div>
+          <div class="rail cfg"></div>
+          <button class="fnode checks" type="button"><b>Findings</b><span>to_findings</span><span class="file">evaluate.py:381</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>The outcome per rule ID, the rule entries, and the reason templates with their placeholders.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip"><span class="kw">class</span> _Values(dict[str, str]):
+    <span class="kw">def</span> __missing__(self, key: str) -&gt; str:
+        <span class="kw">return</span> <span class="c">""</span>
+
+<span class="kw">def</span> format_reason(template: str, values: Mapping[str, str]) -&gt; str:
+    <span class="kw">return</span> template.format_map(_Values(values))</pre>
+            <div class="ref">svc/engine/evaluate.py:354-360</div>
+          </div>
+          <div class="io out"><span class="k">Hands on</span>
+            <p>Findings plus the set of assessed heads. Event keys come from one helper per family in <code>keys.py</code> (<code>ship:</code>, <code>tkt:</code>, <code>cust:</code>, <code>stale:</code>, <code>val:</code>, <code>signal:</code> and others), so the combiner can tell when two rules saw the same event.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 08 Combiner -->
+      <div class="stage" data-label="08">
+        <div class="stage-brief">
+          <div class="stage-no">08</div>
+          <h3>The combiner</h3>
+          <p>A pure function from findings and hard stops to one <code>Priority</code>: separate shadow, count once by event key, keep one signal, cap each head and the total, band the score, apply floors, pick the action, write coverage.</p>
+          <p class="small muted">Try it with the golden worked examples in the <a href="#playground">combiner playground</a> below.</p>
+          <details class="qmore"><summary>Details: combine() step by step</summary><div class="qbody">
+            <h4>What combine() does (svc/engine/combiner.py:96)</h4>
+            <ol>
+              <li><b>Tier</b> picks the caps and bands.</li>
+              <li><b>Separate.</b> Only <code>fired</code> findings can score. Live floors are set aside (they never score); shadow floors are not applied. Shadow findings, or findings with no head, score 0.</li>
+              <li><b>Count once by event key.</b> Highest points wins; on a tie, the lowest rule ID. Losers are <code>dropped_same_event</code>.</li>
+              <li><b>Signal slot.</b> Only the highest signal finding is kept.</li>
+              <li><b>Head caps, then the total cap.</b> Within a head, findings fill the cap highest points first; a partial fit is counted at the reduced value, no room left is <code>dropped_cap</code>.</li>
+              <li><b>Score band</b> from the tier's cut-offs. Tier A has no Rush cut-off, so Rush comes only through a floor.</li>
+              <li><b>Floors.</b> The highest floor band raises the band if it is higher. It never adds points.</li>
+              <li><b>Action.</b> The band's action; a floor's own action if it is more intensive (<code>action_intensity</code>); the channel fallback if that action's channel is off; <code>hold_and_escalate</code> if there is any hard stop.</li>
+              <li><b>Coverage</b> line from the assessed heads.</li>
+            </ol>
+            <p>Each step writes a trace line onto the priority, for example "count-once: LATE-R02 dropped, same event ship:SHP-1 as LATE-R01 (10 pts)".</p>
+            <h4>Things to know</h4>
+            <ul>
+              <li>Holds are not applied here; they acted in stage 06a. Task-only holds pass through onto the priority.</li>
+              <li>The config's <code>count_once</code>, <code>count_once_tie</code> and <code>signal:</code> settings are not read; the behaviour is fixed in code, and validation only accepts the values that match it.</li>
+            </ul>
+            <h4>Why caps, then floors</h4>
+            <p>Caps stop one area, such as many open support tickets, from crowding out everything else. Floors guarantee a minimum band for risky combinations, such as a missed promise date on a repeat-complaint account, without inflating the score that ranks orders.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail em"></div>
+          <div class="rail cfg to"><span class="stub"></span></div>
+          <button class="fnode score" type="button"><b>Combiner</b><span>score, band, action</span><span class="file">combiner.py:96</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p><code>combiner.*</code> config: heads, <code>kind_to_head</code>, caps and bands per tier, actions, <code>action_intensity</code>, channels and fallbacks, tie-break.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">    <span class="kw">for</span> key <span class="kw">in</span> sorted(by_key):
+        group = sorted(by_key[key], key=<span class="kw">lambda</span> f: (-f.raw_points, f.rule_id, f.evidence))
+        win = group[0]</pre>
+            <div class="ref">svc/engine/combiner.py:84-86 (count once: highest points, then lowest rule ID)</div>
+<pre class="snip">    action = channel_fallback(cfg, action, trace)</pre>
+            <div class="ref">svc/engine/combiner.py:194</div>
+          </div>
+          <div class="io warn"><span class="k">Watch</span>
+            <ul>
+              <li>In EU retail today robot picking is on and SMS is off, so Medium (<code>notify_customer</code>) becomes <code>warehouse_task</code>. If a ruleset switches <code>robot_pick</code> off, High becomes <code>manual_pick</code>.</li>
+              <li><code>count_once</code> and <code>count_once_tie</code> in config are validated, not read: the combiner hard-codes that behaviour.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 09 Write and rank -->
+      <div class="stage" data-label="09">
+        <div class="stage-brief">
+          <div class="stage-no">09</div>
+          <h3>Rank, write, and show</h3>
+          <p>Priorities are ranked per warehouse by the ruleset's tie-break. Back in the runner, the result is written to <code>engine.*</code> tables, which feed the pick list and the Holds screen.</p>
+          <details class="qmore"><summary>Details: ranking and the run's writes</summary><div class="qbody">
+            <h4>Ranking (svc/engine/combiner.py:251 and :276)</h4>
+            <ol>
+              <li>Priorities are grouped by warehouse.</li>
+              <li>Each group is sorted by the ruleset's <code>tie_break</code>: band (highest first), score, days late, order age (oldest first), Tier B before Tier A, then order ID so the order is always the same.</li>
+              <li>Ranks start at 1 within each warehouse.</li>
+            </ol>
+            <h4>What the runner writes (svc/engine/runner.py:361)</h4>
+            <ul>
+              <li><code>engine.finding</code>: every finding with its final state and counted points.</li>
+              <li><code>engine.priority</code>: one per scored order, with the tier's total cap.</li>
+              <li><code>engine.hard_stop_outcome</code> and <code>engine.hard_stop_obligation</code>: an obligation is created once per order, rule and event key.</li>
+              <li><code>engine.data_quality_item</code>: the rows the snapshot builder rejected, for scored orders.</li>
+              <li><code>engine.feature_snapshot</code>: a feature vector per order (feature set <code>fs-2026.11</code>), refused if it holds any customer-identity field.</li>
+              <li><code>engine.run</code>: orders scored and errored, hard stops, errors, status and finish time.</li>
+            </ul>
+            <h4>Why snapshots</h4>
+            <p>The feature snapshots are a dated record of each order's features on each run, kept beside the result they produced. The identity guard refuses any identity field (names, emails, phone numbers, addresses) before a vector is stored.</p>
+          </div></details>
+        </div>
+        <div class="stage-mid">
+          <div class="rail em to"><span class="stub"></span></div>
+          <button class="fnode use" type="button"><b>Ranked list</b><span>rank_by_warehouse, runner</span><span class="file">combiner.py:276</span></button>
+        </div>
+        <div class="stage-cards">
+          <div class="io in"><span class="k">Reads</span>
+            <p>The <code>EngineResult</code>, and <code>tie_break: [band, score, days_late, order_age, tier_b_first]</code>, with order ID as the last key.</p>
+          </div>
+          <div class="io proc"><span class="k">Code</span>
+<pre class="snip">        result: EngineResult = get_engine(settings)(list(snapshots.values()), cfg, run_date)</pre>
+            <div class="ref">svc/engine/runner.py:351</div>
+          </div>
+          <div class="io out"><span class="k">Writes</span>
+            <p><code>engine.finding</code>, <code>engine.priority</code>, <code>engine.hard_stop_outcome</code>, <code>engine.hard_stop_obligation</code> (one per order, rule and event key), <code>engine.data_quality_item</code>, <code>engine.feature_snapshot</code>, and the run's status and counts on <code>engine.run</code>.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="stepper" id="stepper" role="group" aria-label="Stage controls">
+      <button class="btn" id="stagePrev" type="button">Back</button>
+      <span class="count" id="stageCount" aria-live="polite"></span>
+      <button class="btn primary" id="stageNext" type="button">Next</button>
+    </div>
+  </section>
+
+  <section id="playground">
+    <span class="num">Combiner playground</span>
+    <h2>Run the combiner on a golden case</h2>
+    <p class="prose muted">Two of EU retail's golden worked examples, with the findings the engine expects for them (<code>rulesets/eu_retail/golden/example_1_tier_b.yaml</code> and <code>example_2_tier_a.yaml</code>). Untick findings, switch the floor, the channels or the shadow signal, and the page reruns the combiner's steps with the ruleset's tier caps and bands. In the real engine a floor fires only when its rule tree holds; here you switch it directly. The orders are synthetic test fixtures.</p>
+    <div class="row" style="margin-top:var(--s4)">
+      <div class="seg" role="group" aria-label="Example" id="exSeg">
+        <button type="button" class="btn" data-ex="ex1" aria-pressed="true">Example 1, Tier B</button>
+        <button type="button" class="btn" data-ex="ex2" aria-pressed="false">Example 2, Tier A</button>
+      </div>
+    </div>
+    <div class="play">
+      <div class="panel">
+        <h3 id="exTitle"></h3>
+        <p class="small muted" id="exDesc"></p>
+        <p class="sub">Findings from stage 07</p>
+        <ul class="fl" id="findingList"></ul>
+        <p class="sub">Switches</p>
+        <div id="switches"></div>
+      </div>
+      <div class="panel" aria-live="polite">
+        <div><span class="big" id="pgTotal">0</span><span class="muted" id="pgCap"></span><span class="bandpill" id="pgBand">low</span></div>
+        <div class="ladder" id="pgLadder"></div>
+        <p class="small" id="pgAction"></p>
+        <table class="heads" id="pgHeads"></table>
+        <p class="sub">What happened to each finding</p>
+        <ul class="res" id="pgFindings"></ul>
+        <p class="sub">Combiner trace</p>
+        <ul class="trace" id="pgTrace"></ul>
+        <p class="note" id="pgCheck"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="status">
+    <span class="num">Where things stand</span>
+    <h2>Built, shadow, and not wired</h2>
+    <div class="status">
+      <div><span class="st" style="color:var(--st-use)">Built and running</span><b>Ruleset loading, snapshot, rules, hard stops, combiner, runner</b><p>On synthetic data, EU retail first. 42 entries in the EU retail ruleset: 30 live, 5 shadow, 6 later, 1 off.</p></div>
+      <div><span class="st" style="color:var(--accent)">Running in shadow</span><b>Anomaly checks AN-P01 to AN-P04</b><p>Recorded and visible, 0 points. AN-P05 is off. The signal head cannot score yet.</p></div>
+      <div><span class="st" style="color:var(--high)">Not wired</span><b>Injected signals, ML predictions, ruleset <code>signal:</code> config</b><p>Exist in the contract or schema; nothing fills them in a normal run.</p></div>
+    </div>
+
+    <details class="checks">
+      <summary>6 rule changes that need engine work, not just the rules file</summary>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>#</th><th>Change</th><th>What the engine lacks</th></tr></thead>
+          <tbody id="engineChanges"></tbody>
+        </table>
+        <p class="note">From <code>docs/engine/RULES.md</code>, "Changes that need the engine, not the rules file". Each needs a design note before code.</p>
+      </div>
+    </details>
+
+    <details class="checks">
+      <summary>Where the docs and the code disagree</summary>
+      <ul>
+        <li><code>ENGINE_CONTRACT.md</code> section 3 documents 9 templates; the code registers 14, and <code>custom</code> dispatches to 2 functions (<code>split_shipment_ladder</code>, <code>hazmat_carrier_check</code>). Missing from the doc: <code>carrier_exception</code>, <code>value_tier</code>, <code>stop_threshold</code>, <code>flag_value</code>, <code>stat</code>.</li>
+        <li>The doc puts <code>route:</code> and <code>ack_minutes:</code> on hard-stop rule entries; the code reads <code>stop.routing.&lt;id&gt;</code> and <code>stop.ack_minutes.&lt;id&gt;</code> from config.</li>
+        <li>The doc's example caps and bands are US wholesale's; EU retail's live in <code>rulesets/eu_retail/config.yaml</code> (the same values today).</li>
+        <li>The repo <code>README.md</code> still says US wholesale first; the agreed order is EU retail first.</li>
+      </ul>
+    </details>
+
+    <details class="checks">
+      <summary>Tests that guard the engine</summary>
+      <ul>
+        <li><code>svc/tests/engine/</code>: 11 test files, including combiner (24 test functions), ruleset (31), stats (18), snapshot (20), hard stops (10), templates (12) and golden (4).</li>
+        <li>Golden cases: 3 per ruleset (Tier B, Tier A, hard stop). A ruleset with no golden cases can never become effective.</li>
+        <li><code>numbers_check.py</code> fails on any numeric literal other than 0 or 1 in <code>svc/engine/</code> unless the line is marked <code># config-exempt</code>.</li>
+      </ul>
+    </details>
+  </section>
+</main>
+<dialog class="qdialog" id="qdialog" aria-labelledby="qdTitle">
+  <div class="qhead">
+    <div><span class="eyebrow" id="qdStage"></span><h3 id="qdTitle"></h3></div>
+    <button class="qclose" id="qdClose" type="button" aria-label="Close">&times;</button>
+  </div>
+  <div class="qbody" id="qdBody"></div>
+</dialog>
+<footer><div class="wrap">Read from the orderflow repo, branch <code>main</code> at a1b2c3d, on 9 Nov 2026. The repo is moving fast; line numbers drift. Example orders are synthetic golden fixtures; no customer data. (Reference example: the repo, code and numbers on this page are fictional.)</div></footer>
+
+<script>
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* (?) panels: open the stage's details in the centred dialog instead of expanding in place. */
+  var qd = $("#qdialog");
+  $$(".qmore").forEach(function (d) {
+    $("summary", d).addEventListener("click", function (e) {
+      e.preventDefault();
+      var stage = d.closest(".stage");
+      $("#qdStage").textContent = stage ? "Stage " + stage.dataset.label : "";
+      $("#qdTitle").textContent = $("summary", d).textContent.replace(/^Details:\s*/, "");
+      $("#qdBody").innerHTML = $(".qbody", d).innerHTML;
+      $("#qdBody").scrollTop = 0;
+      qd.showModal();
+    });
+  });
+  $("#qdClose").onclick = function () { qd.close(); };
+  qd.addEventListener("click", function (e) { if (e.target === qd) qd.close(); });
+
+  /* Ruleset values: rulesets/eu_retail/config.yaml, combiner section. */
+  var CAPS = {
+    A: { delay: 10, service: 30, value: 15, signal: 0, total: 55 },
+    B: { delay: 40, service: 40, value: 15, signal: 10, total: 100 }
+  };
+  var BANDS = { A: { medium: 10, high: 20 }, B: { medium: 10, high: 25, rush: 40 } };
+  var BAND_ORDER = ["low", "medium", "high", "rush"];
+  var ACTIONS = { rush: "expedite_courier_review", high: "priority_pick", medium: "notify_customer", low: "standard_pick" };
+  var INTENSITY = ["standard_pick", "notify_customer", "priority_pick", "manual_pick", "warehouse_task", "supervisor_task", "expedite_courier_review", "hold_and_escalate"];
+  var FALLBACK = { priority_pick: "manual_pick", notify_customer: "warehouse_task" };
+  var HEADS = ["delay", "service", "value", "signal"];
+  var BAND_COLOR = { rush: "var(--urgent)", high: "var(--high)", medium: "var(--medium)", low: "var(--low)" };
+
+  /* Findings as golden/example_1_tier_b.yaml and example_2_tier_a.yaml expect them after stage 07. */
+  var EXAMPLES = {
+    ex1: {
+      title: "Worked example 1, Tier B",
+      desc: "Member order, 3 lines: promise date missed by 2 days, carrier exception, one earlier complaint, open support ticket. Expected: heads 25 / 25 / 5 / 0, total 55, Rush, floor FL-01 High.",
+      tier: "B",
+      expect: { total: 55, band: "rush", action: "expedite_courier_review" },
+      findings: [
+        { id: "LATE-R01", head: "delay", pts: 10, key: "ship:SHP-1" },
+        { id: "LATE-R02", head: "delay", pts: 10, key: "ship:SHP-1" },
+        { id: "HIST-R01", head: "delay", pts: 10, key: "cust:CUS-1" },
+        { id: "STOCK-R03", head: "delay", pts: 5, key: "stale:WH-2|ORDER-1:stock:2026-11" },
+        { id: "SLA-02", head: "service", pts: 25, key: "tkt:TKT-1" },
+        { id: "SLA-01", head: "service", pts: 25, key: "tkt:TKT-1" },
+        { id: "VAL-01", head: "value", pts: 5, key: "val: basket row" },
+        { id: "AN-P02", head: "signal", pts: 3, key: "signal:WH-2|ORDER-1:2026-11-02", shadow: true }
+      ],
+      floor: { id: "FL-01", band: "high", action: null }
+    },
+    ex2: {
+      title: "Worked example 2, Tier A",
+      desc: "Guest checkout, data from this order only: two open delivery tickets, one raised twice, and four value add-ons. Expected: heads 0 / 30 / 15 / 0, total 45, High, action manual_pick (from FL-03).",
+      tier: "A",
+      expect: { total: 45, band: "high", action: "manual_pick" },
+      findings: [
+        { id: "GEN-S01", head: "service", pts: 15, key: "tkt:STK-1" },
+        { id: "HAND-S01", head: "service", pts: 15, key: "tkt:STK-1" },
+        { id: "GEN-S01", head: "service", pts: 15, key: "tkt:STK-2" },
+        { id: "VAL-GEN-01", head: "value", pts: 5, key: "val:BULK" },
+        { id: "VAL-GEN-01", head: "value", pts: 5, key: "val:FRAGILE" },
+        { id: "VAL-GEN-01", head: "value", pts: 5, key: "val:GIFT" },
+        { id: "VAL-GEN-01", head: "value", pts: 5, key: "val:INSURE" }
+      ],
+      floor: { id: "FL-03", band: "high", action: "manual_pick" }
+    }
+  };
+
+  var st = {};
+  function reset(ex) {
+    var e = EXAMPLES[ex];
+    st = { ex: ex, on: e.findings.map(function () { return true; }), floor: true, robot: true, sms: false, signalLive: false };
+  }
+  function cmp(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+
+  /* Mirrors combine() in svc/engine/combiner.py:96-221, steps 2 to 7. */
+  function combine() {
+    var e = EXAMPLES[st.ex], tier = e.tier, caps = CAPS[tier], trace = ["tier " + tier], out = [], cands = [];
+    e.findings.forEach(function (f, i) {
+      if (!st.on[i]) return;
+      var g = Object.assign({}, f);
+      if (g.shadow && !st.signalLive) out.push(Object.assign(g, { state: "shadow", counted: 0, note: "shadow: 0 points" }));
+      else cands.push(g);
+    });
+    // 3. Count once by event key: highest points, then lowest rule ID.
+    var byKey = {}, winners = [];
+    cands.forEach(function (f) { (byKey[f.key] = byKey[f.key] || []).push(f); });
+    Object.keys(byKey).sort().forEach(function (k) {
+      var grp = byKey[k].sort(function (a, b) { return b.pts - a.pts || cmp(a.id, b.id); });
+      winners.push(grp[0]);
+      grp.slice(1).forEach(function (l) {
+        var note = "same event " + k + " as " + grp[0].id + " (" + grp[0].pts + " pts)";
+        out.push(Object.assign(l, { state: "dropped_same_event", counted: 0, note: note }));
+        trace.push("count-once: " + l.id + " dropped, " + note);
+      });
+    });
+    // The one-signal slot step is a no-op here: each example carries at most one signal finding.
+    var byHead = {};
+    winners.forEach(function (f) { (byHead[f.head] = byHead[f.head] || []).push(f); });
+    // 4. Head caps, then total cap.
+    var heads = HEADS.map(function (h) {
+      var cap = caps[h], rem = cap, raw = 0;
+      (byHead[h] || []).sort(function (a, b) { return b.pts - a.pts || cmp(a.id, b.id) || cmp(a.key, b.key); }).forEach(function (f) {
+        raw += f.pts;
+        var c = Math.min(f.pts, rem); rem -= c;
+        if (c <= 0 && f.pts > 0) out.push(Object.assign(f, { state: "dropped_cap", counted: 0, note: h + " head cap " + cap + " reached" }));
+        else if (c < f.pts) out.push(Object.assign(f, { state: "counted", counted: c, note: "capped from " + f.pts + " to " + c + " (" + h + " cap " + cap + ")" }));
+        else out.push(Object.assign(f, { state: "counted", counted: c, note: "" }));
+      });
+      if (raw > cap) trace.push(h + ": " + raw + " capped to " + cap);
+      return { head: h, raw: raw, capped: Math.min(raw, cap), cap: cap };
+    });
+    var rawTotal = heads.reduce(function (a, h) { return a + h.capped; }, 0);
+    var total = Math.min(rawTotal, caps.total);
+    if (rawTotal > caps.total) trace.push("total " + rawTotal + " capped to " + caps.total);
+    // 5. Score band.
+    var sBand = "low";
+    BAND_ORDER.forEach(function (b) { if (BANDS[tier][b] !== undefined && total >= BANDS[tier][b]) sBand = b; });
+    trace.push("score " + total + " → " + sBand + " (Tier " + tier + ")");
+    // 6 and 7. Floor, final band, action, channel fallback.
+    var band = sBand, fl = st.floor ? e.floor : null;
+    if (fl) {
+      out.push({ id: fl.id, head: "", pts: 0, key: "", state: "floor", counted: 0, note: "minimum band " + fl.band + (fl.action ? ", action " + fl.action : "") });
+      trace.push("floor " + fl.id + " → " + fl.band);
+      if (BAND_ORDER.indexOf(fl.band) > BAND_ORDER.indexOf(sBand)) { band = fl.band; trace.push("band raised by floor " + fl.id); }
+    }
+    var action = ACTIONS[band];
+    if (fl && fl.action && INTENSITY.indexOf(fl.action) > INTENSITY.indexOf(action)) action = fl.action;
+    var chanOn = { priority_pick: st.robot, notify_customer: st.sms };
+    if (FALLBACK[action] && !chanOn[action]) { trace.push(action + " off → " + FALLBACK[action]); action = FALLBACK[action]; }
+    out.sort(function (a, b) { return cmp(a.id, b.id) || cmp(a.key, b.key); });
+    return { tier: tier, heads: heads, total: total, sBand: sBand, band: band, action: action, findings: out, trace: trace };
+  }
+
+  var STATE_LABEL = { counted: ["counted", "counted"], dropped_same_event: ["same event", "dropped"], dropped_cap: ["over cap", "dropped"], shadow: ["shadow", "shadow"], floor: ["floor", "floor"] };
+  function buildControls() {
+    var e = EXAMPLES[st.ex];
+    $("#exTitle").textContent = e.title;
+    $("#exDesc").textContent = e.desc;
+    $("#findingList").innerHTML = e.findings.map(function (f, i) {
+      return "<li><label class='chk'><input type='checkbox' data-i='" + i + "'" + (st.on[i] ? " checked" : "") + "><span><span class='rid'>" + f.id + "</span><span class='meta'>" + f.head + " · " + f.key + (f.shadow ? " · shadow" : "") + "</span></span><span class='pts'>" + f.pts + " pts</span></label></li>";
+    }).join("");
+    var sw = "<label class='chk'><input type='checkbox' id='swFloor'" + (st.floor ? " checked" : "") + "> Floor " + e.floor.id + " holds (minimum band " + e.floor.band + (e.floor.action ? ", action " + e.floor.action : "") + ")</label>" +
+      "<label class='chk'><input type='checkbox' id='swRobot'" + (st.robot ? " checked" : "") + "> Robot picking on (ruleset today: on)</label>" +
+      "<label class='chk'><input type='checkbox' id='swSms'" + (st.sms ? " checked" : "") + "> SMS channel on (ruleset today: off, provider not connected)</label>";
+    if (e.findings.some(function (f) { return f.shadow; })) sw += "<label class='chk'><input type='checkbox' id='swSig'" + (st.signalLive ? " checked" : "") + "> Hypothetical: treat AN-P02 as live</label>";
+    $("#switches").innerHTML = sw;
+    $$("#findingList input").forEach(function (b) { b.onchange = function () { st.on[+b.dataset.i] = b.checked; render(); }; });
+    $("#swFloor").onchange = function () { st.floor = this.checked; render(); };
+    $("#swRobot").onchange = function () { st.robot = this.checked; render(); };
+    $("#swSms").onchange = function () { st.sms = this.checked; render(); };
+    if ($("#swSig")) $("#swSig").onchange = function () { st.signalLive = this.checked; render(); };
+  }
+  function render() {
+    var r = combine(), e = EXAMPLES[st.ex];
+    $("#pgTotal").textContent = r.total;
+    $("#pgCap").textContent = " / " + CAPS[r.tier].total;
+    var bp = $("#pgBand"); bp.textContent = r.band; bp.style.background = BAND_COLOR[r.band];
+    $("#pgLadder").innerHTML = BAND_ORDER.map(function (b) {
+      var cut = b === "low" ? 0 : BANDS[r.tier][b];
+      return "<div class='" + (b === r.band ? "on" : "") + "' style='border-color:" + BAND_COLOR[b] + "'>" + b + "<br><span class='mono'>" + (cut === undefined ? "floor only" : cut + "+") + "</span></div>";
+    }).join("");
+    $("#pgAction").innerHTML = "Score band <b>" + r.sBand + "</b>, final band <b>" + r.band + "</b>, action <code>" + r.action + "</code>.";
+    $("#pgHeads").innerHTML = "<tr><th>Head</th><th>Raw</th><th>Counted</th><th>Cap</th></tr>" + r.heads.map(function (h) {
+      return "<tr><td>" + h.head + "</td><td>" + h.raw + "</td><td>" + h.capped + "</td><td>" + h.cap + "</td></tr>";
+    }).join("");
+    $("#pgFindings").innerHTML = r.findings.length ? r.findings.map(function (f) {
+      var l = STATE_LABEL[f.state];
+      return "<li><span class='st " + l[1] + "'>" + l[0] + "</span><span><b>" + f.id + "</b>" + (f.key ? " <span class='muted mono small'>" + f.key + "</span>" : "") + (f.note ? "<br><span class='muted'>" + f.note + "</span>" : "") + "</span><span class='pts'>" + (f.state === "floor" ? "" : f.counted + " / " + f.pts) + "</span></li>";
+    }).join("") : "<li><span class='st dropped'>none</span><span>No findings ticked.</span><span></span></li>";
+    $("#pgTrace").innerHTML = r.trace.map(function (t) { return "<li>" + t + "</li>"; }).join("");
+    var all = st.on.every(Boolean) && st.floor && st.robot && !st.sms && !st.signalLive;
+    var match = r.total === e.expect.total && r.band === e.expect.band && r.action === e.expect.action;
+    $("#pgCheck").textContent = all ? (match ? "Matches the golden case: total " + e.expect.total + ", band " + e.expect.band + ", action " + e.expect.action + "." : "Does not match the golden case's expected result.") : "Changed from the golden case. Tick every finding and set the switches back to the ruleset's values to compare with the expected result.";
+  }
+  $$("#exSeg button").forEach(function (b) {
+    b.onclick = function () {
+      $$("#exSeg button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      reset(b.dataset.ex); buildControls(); render();
+    };
+  });
+  reset("ex1"); buildControls(); render();
+
+  /* docs/engine/RULES.md, "Changes that need the engine, not the rules file". */
+  var CHANGES = [
+    ["SLA gap keyed on the promise date, not the order date (SLA-01, SLA-02)", "A due-date event-key family"],
+    ["Windows measured to the stock feed's extract time; no firing when a feed is missing (STOCK-R03, other stale rules)", "Extract time and feed status as engine inputs"],
+    ["Weights in pounds and kilograms in one ruleset (VAL-01, VAL-GEN-01)", "Unit conversion per line, not per ruleset"],
+    ["A ticket closed by the customer does not close FL-03", "Status handling in ticket_open"],
+    ["LATE-R02 stops only after two on-time scans", "Remembered state"],
+    ["Split shipments scored per parcel, not per order (LATE-R01, LATE-R02)", "A parcel-level event key"]
+  ];
+  $("#engineChanges").innerHTML = CHANGES.map(function (c, i) { return "<tr><td>" + (i + 1) + "</td><td>" + c[0] + "</td><td>" + c[1] + "</td></tr>"; }).join("");
+
+  /* Stage walkthrough: the row crossing the middle of the viewport is the active stage. */
+  var rows = $$("#stages .stage"), cur = 0;
+  function setStage(i) {
+    cur = i;
+    rows.forEach(function (row, n) { row.classList.toggle("is-active", n === i); });
+    $("#stageCount").textContent = rows[i].dataset.label + " · " + (i + 1) + " of " + rows.length;
+    $("#stagePrev").disabled = i === 0;
+    $("#stageNext").textContent = i === rows.length - 1 ? "Continue" : "Next";
+  }
+  function goStage(i) { rows[i].scrollIntoView({ block: "center" }); }
+  var watch = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) setStage(rows.indexOf(e.target)); });
+  }, { rootMargin: "-50% 0px -50% 0px" });
+  rows.forEach(function (row, i) {
+    watch.observe(row);
+    $(".fnode", row).addEventListener("click", function () { goStage(i); });
+  });
+  new IntersectionObserver(function (entries) {
+    $("#stepper").classList.toggle("show", entries[0].isIntersecting);
+  }, { rootMargin: "-40% 0px -40% 0px" }).observe($("#stages"));
+  $("#stagePrev").onclick = function () { if (cur > 0) goStage(cur - 1); };
+  $("#stageNext").onclick = function () {
+    if (cur < rows.length - 1) goStage(cur + 1);
+    else $("#playground").scrollIntoView({ block: "start" });
+  };
+  setStage(0);
+})();
+</script>
+</body>
+</html>
