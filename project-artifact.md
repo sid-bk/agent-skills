@@ -74,7 +74,7 @@ Use only the tabs with real content; order matters (readers go top to bottom).
 
 - **Status banner at the top**, above the tabs, one line: phase · the lead workstream · a couple of size/health numbers · any gate.
 - **Next steps directly under the banner**, above the tabs so it's visible whichever tab is open. 1–3 items, most important first, each `who → the exact action → what it unblocks`. Make it a collapsible `<details open>`; keep the item count in the `<summary>`. Nothing pending? Keep the strip and say so in one line.
-- **Status pills, not prose**, in tables: `done` / `in progress` / `next` / `blocked` / `⚠ caveat`. Define the classes in CSS once.
+- **Status pills, not prose**, in tables: `done` / `in progress` / `next` / `blocked` / `caveat`. Define the classes in CSS once.
 - **Keep section/tab ids stable across redeploys** — the next refresh edits the previous render in place and keys off them.
 - **Self-contained.** The publish surface blocks requests to any external host: CDN scripts, external stylesheets, web fonts, remote images, fetch/XHR. Inline all CSS, embed images as `data:` URIs; one small `<script>` for tabs is fine. System font stacks only.
 - **Diagrams as inline SVG** when a picture genuinely earns its place — keeps the page self-contained, scales, tracks light/dark via `currentColor`. State the same fact in text too.

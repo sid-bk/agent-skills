@@ -20,9 +20,13 @@ Invoke when the user says: "create user stories", "write tickets", "generate sto
 ### Step 0 — Load existing context
 
 1. Check if a codebase reference doc exists (e.g. `codebase.md` or a similarly named architecture reference). If it does, read it first — it maps the system's modules, routes, settings, and known issues. Skip re-exploring anything the reference already covers.
-2. Check if `user_stories.md` or `tickets.md` already exist in the output location. If so, read them — update or extend rather than recreate from scratch.
-3. Check if an issues doc exists. If so, read it — use it as the primary source list for ticket creation.
+2. Determine the output target (see **Output targets** below) and check for existing output there — a `user_stories.md`/`tickets.md` pair, or a `user_stories/` directory of one-file-per-story notes. If found, read it — update or extend rather than recreate from scratch, and match whichever of the two shapes is already in use.
+3. Check if an issues doc (or, in vault mode, an `issues/` directory) exists. If so, read it — use it as the primary source list for ticket creation.
 4. Determine the mode: if the user names a codebase directory, use Mode A. If the user provides a description only, use Mode B.
+
+**Output targets:**
+- **Linear / single-doc:** the project's stories live as one uploaded document, or the user hasn't indicated otherwise. Use the combined-file shape in Step 5.
+- **Obsidian vault:** the output directory sits inside a vault that already organizes work as one-note-per-item (an `issues/` folder of individual `ABC-N.md`/ticket notes is the tell, or the user says so explicitly). Use the per-file shape in Step 5, and file tickets as issue notes in that project's own `issues/` convention rather than a generic `tickets.md` — read a couple of existing issue notes first and match their frontmatter/heading structure exactly rather than inventing a new one.
 
 ### Step 1 — Explore the codebase (Mode A only; skip if reference doc covers it)
 
@@ -123,8 +127,13 @@ Numbering: use a short project prefix (e.g. `APP-B01`, `APP-B02` for bugs; `APP-
 
 ### Step 5 — Save output
 
+**Linear / single-doc target:**
 - User stories → output directory as `user_stories.md`
 - Tickets → output directory as `tickets.md`
+
+**Obsidian vault target:**
+- User stories → one file per story in `<project>/user_stories/`, named by story id (e.g. `US-1.md`). Frontmatter matches the vault's issue-note convention — `tags: [user-story]`, `id: US-N`, `project`, `area`, `value`, `status`, `created` — followed by a body of `# US-N — [Title]`, `### Description`, `### Tasks`, `### Acceptance Criteria`. Add a short `README.md` (or reuse an existing index note) in `user_stories/` listing id/title/area/status for at-a-glance scanning — hand-written, not script-generated, since there's no rebuild step for it the way `issues/` has one.
+- Tickets → one issue note per ticket in `<project>/issues/`, following that project's existing issue frontmatter and body template exactly (check a real example first — don't reuse the Linear ticket format above). Give each a `user_story: US-N` frontmatter field (or omit it for a ticket with no single owning story) so the story ↔ ticket link is queryable without prose cross-references.
 
 If no codebase reference doc exists and the codebase is non-trivial, offer to create one as a fast re-entry file (architecture overview, route map, settings table, known issues summary). This prevents re-exploring the codebase on every future session.
 

@@ -46,6 +46,10 @@
 
 - **YAGNI.** Only build what the current task requires. No auto-reset handlers, fallback paths, or abstractions for hypothetical future states — if the user hasn't asked for it, it doesn't belong in the diff.
 - **Smallest correct change.** A bug fix touches the bug. A feature adds the feature. Nothing else moves.
+- **No new dependencies without confirmation.** Do not add, or tell me to install, a package or external library until I confirm. Name the candidate and why it is needed, then wait.
+- **No guessing on ambiguity.** If a request or spec is ambiguous, give 2-3 concise options with trade-offs and wait for a choice. Do not pick silently.
+- **No emojis.** Not in responses, code, comments, commit messages, docs or config. Use plain-text markers instead.
+- **Session reset.** If auto-compact is off, write key decisions and open items to `docs/current_task.md` when context grows large, then suggest `/clear` or a new session.
 
 ---
 

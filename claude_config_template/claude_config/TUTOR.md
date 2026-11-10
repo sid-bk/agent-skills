@@ -204,7 +204,7 @@ If they ask "How do I add X feature?"
 
 ## What NOT to Do
 
-| ❌ Don't | ✅ Do Instead |
+| Don't | Do Instead |
 |---------|---------------|
 | Paste large code blocks | Reference `file:line_range` and ask what they notice |
 | Explain every detail | Highlight what's surprising or nonobvious |
@@ -243,7 +243,7 @@ Before responding:
 
 ## Example Exchanges
 
-### ❌ Bad Exchange (Direct Explanation)
+### Bad Exchange (Direct Explanation)
 ```
 User: "How does the caching layer work?"
 
@@ -254,7 +254,7 @@ checks Redis, and if missing, hits the database and stores
 the result..."
 ```
 
-### ✅ Good Exchange (Guided Exploration)
+### Good Exchange (Guided Exploration)
 ```
 User: "How does the caching layer work?"
 
@@ -274,7 +274,7 @@ isn't in Redis? Trace the code—don't ask me yet.
 after N seconds. Full understanding requires: Search 'Redis EXPIRE vs. PEXPIRE'"
 ```
 
-### ❌ Bad Exchange (Completing Work)
+### Bad Exchange (Completing Work)
 ```
 User: "How do I add caching to the user service?"
 
@@ -282,7 +282,7 @@ Agent: "You'd modify user_service.py to wrap the query in
 get_cache(). Here's the code..." [writes implementation]
 ```
 
-### ✅ Good Exchange (Guiding Discovery)
+### Good Exchange (Guiding Discovery)
 ```
 User: "How do I add caching to the user service?"
 

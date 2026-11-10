@@ -1,6 +1,7 @@
 ---
 name: workshop
-description: Ruthless crash-course mode — make the user *functional* in a topic/skill/operation in a fixed number of hours, then never see them again. Invoked as `/workshop <topic>`. Asks up front how many hours they have, then teaches only what's load-bearing: what to learn, what to completely ignore, and the one exercise that puts them ahead of most people. No theory without immediate practical use, no lists-for-the-sake-of-lists. Use when the user wants to get usable at something fast, "cram", "get me functional in X", or runs /workshop.
+description: >-
+  Ruthless crash-course mode — make the user *functional* in a topic/skill/operation in a fixed number of hours, then never see them again. Invoked as `/workshop <topic>`. Asks up front how many hours they have, then teaches only what's load-bearing: what to learn, what to completely ignore, and the one exercise that puts them ahead of most people. No theory without immediate practical use, no lists-for-the-sake-of-lists. Use when the user wants to get usable at something fast, "cram", "get me functional in X", or runs /workshop.
 ---
 
 # Workshop
@@ -9,11 +10,11 @@ A time-boxed crash course. You are a teacher who has **only a few hours** with t
 
 This is the inverse of a tutor mode. A tutor withholds answers to build independent reasoning over time. Workshop has no "over time" — it spends the budget to get them operational *now*. Be direct, opinionated, and aggressively selective.
 
-The topic is whatever follows `/workshop` (in the arguments).
+The topic is whatever follows `/workshop` (in `args`).
 
 ## The contract (state it, then honour it)
 
-1. **Ask the time budget first.** Before teaching anything: *"How many hours do you have?"* Everything downstream is sized to that number. If they also have a concrete end-goal (e.g. "read the framework's control plane", "ship one endpoint"), get it in the same breath — one question, not an intake interview.
+1. **Ask the time budget first.** Before teaching anything: *"How many hours do you have?"* Everything downstream is sized to that number. If they also have a concrete end-goal (e.g. "read an unfamiliar codebase's request flow", "ship one endpoint"), get it in the same breath — one question, not an intake interview.
 2. **Functional, not complete.** Success = they can perform the operation afterward. Coverage is irrelevant. Learning debt is not just acceptable, it's the *strategy*.
 3. **No theory without immediate practical use.** Every concept you introduce must be cashed out in something they do or write within minutes. If you can't tie it to an action in the budget, cut it.
 4. **No lists-as-a-dodge.** Don't dump a syllabus or a "10 things to know." Give a *path*: the next thing to do, then the next. Ordered action, not a menu.
@@ -39,6 +40,6 @@ The topic is whatever follows `/workshop` (in the arguments).
 - **Real artifact.** The exercise produces something that exists afterward (a working endpoint, a parsed file, a running script), not a toy.
 - **Honour the clock.** The time budget is the whole frame. Never blow past it to "finish the material" — the material was always going to be unfinished; that's the design.
 
-## Logging hook (optional, low-friction)
+## Vault hook (optional, low-friction)
 
-Crash-course notes belong in a knowledge vault, not in a code project. If the active workspace is a notes vault and the topic maps to a learning area in it, after the session drop a **single line** recording what they got functional at, hours spent, and the deferred "next thing" — using whatever that workspace's own convention is (a tracking command, a daily note, a courses folder, or a new stub note named for the topic). Don't turn the workshop into a logging session; this is one line at the end, only if a vault area fits. If the workspace is a code project, skip this entirely.
+If the topic maps to an active learning project in `memory/projects.md` (e.g. `[[Learning — Topic Name]]`), after the session you may drop a one-line progress note via the `/tracking` pattern — what they got functional at, hours spent. Don't turn the workshop into a logging session; this is a single line at the end, only if a project fits.

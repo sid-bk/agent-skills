@@ -47,6 +47,22 @@
 
 ---
 
+## Commands
+
+> Exact commands, run from the stated directory. Claude gives these to you to run and states the pass criteria; fill every line or write n/a.
+
+| Purpose | Command | Pass means |
+|---|---|---|
+| Typecheck | <<e.g. `tsc --noEmit` / `uv run mypy src`>> | <<zero errors>> |
+| Build | <<...>> | <<exit 0>> |
+| Run all tests | <<...>> | <<all pass>> |
+| Run one test | <<e.g. `uv run pytest path::name -q`>> | <<passes>> |
+| Lint | <<...>> | <<zero findings beyond baseline>> |
+| Format check | <<...>> | <<no diff>> |
+| Format fix | <<...>> | <<files rewritten>> |
+
+---
+
 ## Key Files
 
 | File | Purpose |
