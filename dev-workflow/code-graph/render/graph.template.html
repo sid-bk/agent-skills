@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Graph</title>
+<script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --border: #e2e2dd; --text: #1f2328; --muted: #6b6f76;
+  --hover: #f0f0ec; --accent: #2f6fdb; --hit: #fff3bf; --dim: #d9d9d4; --edge: #c9c9c3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141517; --panel: #1c1d20; --border: #2e3035; --text: #e6e6e3; --muted: #9a9ea6;
+    --hover: #26282c; --accent: #6ea0ff; --hit: #4a4220; --dim: #34363b; --edge: #3a3c42;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141517; --panel: #1c1d20; --border: #2e3035; --text: #e6e6e3; --muted: #9a9ea6;
+  --hover: #26282c; --accent: #6ea0ff; --hit: #4a4220; --dim: #34363b; --edge: #3a3c42;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+#app { display: grid; grid-template-columns: 320px 1fr 340px; height: 100vh; }
+#app.no-detail { grid-template-columns: 320px 1fr 0; }
+aside { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+#detail { border-right: 0; border-left: 1px solid var(--border); overflow-y: auto; padding: 14px; }
+#app.no-detail #detail { display: none; }
+header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 14px; margin: 0 0 8px; }
+#search { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-size: 13px; }
+#search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#results { max-height: 34vh; overflow-y: auto; border-bottom: 1px solid var(--border); display: none; }
+#results.open { display: block; }
+.result { padding: 6px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.result:hover, .result.active { background: var(--hover); }
+.result .why { color: var(--muted); font-size: 11px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.chip { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 999px;
+  padding: 3px 9px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+.chip.off { opacity: 0.4; }
+.chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.chip:disabled { cursor: default; opacity: 0.35; }
+#explorer { overflow-y: auto; flex: 1; padding: 6px 4px 20px; }
+#explorer details > summary { list-style: none; cursor: pointer; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+#explorer details > summary::-webkit-details-marker { display: none; }
+#explorer details > summary::before { content: "\25B8"; display: inline-block; width: 12px; color: var(--muted); }
+#explorer details[open] > summary::before { content: "\25BE"; }
+#explorer details > div { padding-left: 12px; }
+#explorer summary:hover, .sym:hover { background: var(--hover); }
+.sym { padding: 1px 6px 1px 18px; cursor: pointer; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sym .k, summary .k { color: var(--muted); font-size: 11px; margin-left: 4px; }
+.hit { background: var(--hit) !important; }
+.selected { outline: 1px solid var(--accent); }
+main { position: relative; min-width: 0; }
+#graph { position: absolute; inset: 0; }
+#toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 6px; align-items: center; z-index: 2; pointer-events: none; }
+#toolbar > * { pointer-events: auto; }
+#toolbar button, #toolbar select { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+#status { margin-left: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; color: var(--muted); font-size: 12px; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); z-index: 1; }
+#detail h2 { font-size: 15px; margin: 0 0 4px; word-break: break-word; }
+#detail .meta { color: var(--muted); margin-bottom: 10px; }
+#detail h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 4px; }
+#detail code { font-size: 12px; word-break: break-all; }
+#detail .nb { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+#detail .nb:hover { background: var(--hover); }
+#detail button { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; cursor: pointer; font-size: 12px; }
+.close { float: right; }
+</style>
+</head>
+<body>
+<div id="app" class="no-detail">
+  <aside>
+    <header>
+      <h1 id="title">Code Graph</h1>
+      <input id="search" type="search" placeholder="Search symbols, files, clusters, descriptions" autocomplete="off">
+    </header>
+    <div id="results"></div>
+    <div class="chips" id="chips"></div>
+    <div id="explorer"></div>
+  </aside>
+  <main>
+    <div id="toolbar">
+      <button id="back" hidden>Back to full graph</button>
+      <select id="depth" hidden title="Neighbourhood depth"><option value="1">1 hop</option><option value="2">2 hops</option></select>
+      <select id="colorBy" title="Colour nodes by"><option value="category">Colour: category</option><option value="cluster">Colour: cluster</option></select>
+      <span id="status"></span>
+    </div>
+    <div id="loading">Laying out graph...</div>
+    <div id="graph"></div>
+  </main>
+  <aside id="detail"></aside>
+</div>
+<script>
+const D = /*__CODE_GRAPH_DATA__*/null;
+const CATEGORY_COLORS = { Frontend: "#4E79A7", Backend: "#E8833A", Tests: "#59A14F", Tooling: "#B07AA1", External: "#9C9C9C", Other: "#76B7B2" };
+const CLUSTER_PALETTE = ["#4E79A7","#F28E2B","#E15759","#76B7B2","#59A14F","#EDC948","#B07AA1","#FF9DA7","#9C755F","#BAB0AC","#2F6FDB","#C05780"];
+const KIND_LABEL = { file: "file", class: "class", function: "fn", method: "method", symbol: "var", external: "ext" };
+const nodes = D.nodes, clusters = D.clusters;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const adjacency = nodes.map(() => []);
+D.edges.forEach(([s, t, r], i) => { adjacency[s].push([t, r, "out", i]); adjacency[t].push([s, r, "in", i]); });
+/*__SEARCH_JS__*/
+const runSearch = createSearch(D);
+
+let colorBy = "category", hiddenCategories = new Set(), hits = new Set(), focusId = null, fullPositions = null;
+const counts = {};
+nodes.forEach((n) => { counts[n.category] = (counts[n.category] || 0) + 1; });
+
+function baseColor(n) {
+  return colorBy === "cluster" ? CLUSTER_PALETTE[n.cluster % CLUSTER_PALETTE.length] : CATEGORY_COLORS[n.category];
+}
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function visNode(i) {
+  const n = nodes[i], dimmed = hits.size > 0 && !hits.has(i);
+  const color = dimmed ? css("--dim") : baseColor(n);
+  return { id: i, label: n.label, value: adjacency[i].length + 1, hidden: hiddenCategories.has(n.category),
+           color: { background: color, border: color, highlight: { background: color, border: css("--accent") } },
+           font: { color: dimmed ? css("--muted") : css("--text"), size: hits.has(i) ? 13 : 9 } };
+}
+function visEdge(i) {
+  const [s, t, r] = D.edges[i];
+  return { id: i, from: s, to: t, title: D.relations[r] };
+}
+
+const nodeSet = new vis.DataSet(nodes.map((_, i) => visNode(i)));
+const edgeSet = new vis.DataSet(D.edges.map((_, i) => visEdge(i)));
+const network = new vis.Network($("graph"), { nodes: nodeSet, edges: edgeSet }, {
+  nodes: { shape: "dot", borderWidth: 1, scaling: { min: 2, max: 10, label: { enabled: true, min: 7, max: 12, drawThreshold: 6, maxVisible: 16 } } },
+  edges: { color: { color: css("--edge"), highlight: css("--accent") }, width: 0.4, smooth: false,
+           arrows: { to: { enabled: false } }, selectionWidth: 1.2 },
+  physics: { solver: "forceAtlas2Based",
+             forceAtlas2Based: { gravitationalConstant: -160, centralGravity: 0.004, springLength: 140, springConstant: 0.04, damping: 0.6, avoidOverlap: 0.8 },
+             maxVelocity: 30, minVelocity: 1, stabilization: { iterations: 250, updateInterval: 50 } },
+  interaction: { hover: true, tooltipDelay: 150, hideEdgesOnDrag: true, hideEdgesOnZoom: true, dragNodes: false },
+  layout: { improvedLayout: false, randomSeed: 7 }
+});
+/* Physics only lays the graph out once; it is switched off for good afterwards so nothing drifts or rotates. */
+function freezeFullLayout() {
+  if (fullPositions) return;
+  network.setOptions({ physics: false });
+  fullPositions = network.getPositions();
+  const loading = $("loading");
+  if (loading) loading.remove();
+  network.fit();
+  setStatus();
+}
+network.once("stabilizationIterationsDone", freezeFullLayout);
+setTimeout(freezeFullLayout, 20000);
+network.on("click", (e) => { if (e.nodes.length) select(e.nodes[0]); });
+
+function setStatus() {
+  const shown = focusId === null ? nodes.filter((n) => !hiddenCategories.has(n.category)).length : nodeSet.length;
+  const searchNote = hits.size ? ` | ${hits.size} matching` : "";
+  $("status").textContent = (focusId === null ? `${shown} nodes, ${Object.keys(clusters).length} clusters` : `Neighbourhood of ${nodes[focusId].label}: ${shown} nodes`) + searchNote;
+}
+function refreshColors() {
+  if (focusId === null) nodeSet.update(nodes.map((_, i) => visNode(i)));
+  else nodeSet.update(nodeSet.getIds().map((i) => visNode(i)));
+  setStatus();
+}
+
+/* Category chips */
+D.categories.forEach((cat) => {
+  const chip = document.createElement("button");
+  chip.className = "chip";
+  chip.innerHTML = `<i style="background:${CATEGORY_COLORS[cat]}"></i>${cat} <span class="k">${counts[cat] || 0}</span>`;
+  if (!counts[cat]) { chip.disabled = true; chip.title = cat === "Tests" ? "Excluded at build time. Rebuild with --include tests." : "None in this graph"; }
+  chip.onclick = () => {
+    hiddenCategories.has(cat) ? hiddenCategories.delete(cat) : hiddenCategories.add(cat);
+    chip.classList.toggle("off", hiddenCategories.has(cat));
+    if (focusId === null) nodeSet.update(nodes.map((n, i) => ({ id: i, hidden: hiddenCategories.has(n.category) })));
+    setStatus();
+  };
+  $("chips").appendChild(chip);
+});
+
+/* Explorer: category > folders > file > symbols, built lazily */
+const tree = {};
+nodes.forEach((n, i) => {
+  const parts = n.file ? n.file.split("/") : ["(external)"];
+  let level = (tree[n.category] = tree[n.category] || { dirs: {}, files: {} });
+  parts.slice(0, -1).forEach((p) => { level = (level.dirs[p] = level.dirs[p] || { dirs: {}, files: {} }); });
+  const fileName = n.file ? parts[parts.length - 1] : "(external)";
+  const file = (level.files[fileName] = level.files[fileName] || { self: null, symbols: [] });
+  if (n.kind === "file") file.self = i; else file.symbols.push(i);
+});
+function folder(label, branch, key, count) {
+  const d = document.createElement("details");
+  d.dataset.key = key;
+  d.innerHTML = `<summary>${esc(label)}${count !== undefined ? ` <span class="k">${count}</span>` : ""}</summary><div></div>`;
+  d.addEventListener("toggle", () => { if (d.open && !d.dataset.built) { d.dataset.built = 1; fillBranch(d.lastElementChild, branch, key); } });
+  return d;
+}
+function fillBranch(container, branch, key) {
+  Object.keys(branch.dirs).sort().forEach((name) => container.appendChild(folder(name + "/", branch.dirs[name], key + "/" + name)));
+  Object.keys(branch.files).sort().forEach((name) => {
+    const file = branch.files[name], fileKey = key + "/" + name;
+    const d = document.createElement("details");
+    d.dataset.key = fileKey;
+    d.innerHTML = `<summary>${esc(name)} <span class="k">${file.symbols.length}</span></summary><div></div>`;
+    if (file.self !== null) d.firstElementChild.dataset.node = file.self;
+    d.addEventListener("toggle", () => {
+      if (!d.open || d.dataset.built) return;
+      d.dataset.built = 1;
+      file.symbols.sort((a, b) => (nodes[a].line || 0) - (nodes[b].line || 0)).forEach((i) => {
+        const row = document.createElement("div");
+        row.className = "sym" + (hits.has(i) ? " hit" : "");
+        row.dataset.node = i;
+        row.innerHTML = `${esc(nodes[i].label)}<span class="k">${KIND_LABEL[nodes[i].kind]}${nodes[i].line ? " :" + nodes[i].line : ""}</span>`;
+        d.lastElementChild.appendChild(row);
+      });
+    });
+    container.appendChild(d);
+  });
+}
+D.categories.forEach((cat) => { if (tree[cat]) $("explorer").appendChild(folder(cat, tree[cat], cat, counts[cat])); });
+$("explorer").addEventListener("click", (e) => {
+  const target = e.target.closest("[data-node]");
+  if (target) select(+target.dataset.node);
+});
+function revealInExplorer(i) {
+  const n = nodes[i];
+  const parts = n.file ? n.file.split("/") : ["(external)"];
+  let key = n.category, scope = $("explorer");
+  const steps = [key].concat(parts.map((p) => (key += "/" + p)));
+  let el = null;
+  for (const k of steps) {
+    el = scope.querySelector(`:scope > details[data-key="${CSS.escape(k)}"], :scope > div > details[data-key="${CSS.escape(k)}"]`);
+    if (!el) return;
+    if (!el.open) el.open = true;
+    el.dispatchEvent(new Event("toggle"));
+    scope = el;
+  }
+  document.querySelectorAll("#explorer .selected").forEach((x) => x.classList.remove("selected"));
+  const row = el.querySelector(`.sym[data-node="${i}"]`) || el.firstElementChild;
+  row.classList.add("selected");
+  row.scrollIntoView({ block: "center" });
+}
+function markExplorerHits() {
+  document.querySelectorAll("#explorer .sym").forEach((row) => row.classList.toggle("hit", hits.has(+row.dataset.node)));
+}
+
+/* Search */
+let searchTimer = null;
+$("search").addEventListener("input", (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => applySearch(e.target.value), 150); });
+$("search").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { const first = document.querySelector(".result"); if (first) select(+first.dataset.node); }
+  if (e.key === "Escape") { e.target.value = ""; applySearch(""); }
+});
+function applySearch(query) {
+  const results = runSearch(query);
+  hits = new Set(results.map((r) => r[1]));
+  const box = $("results");
+  box.innerHTML = results.slice(0, 60).map(([, i, why]) => {
+    const n = nodes[i], c = clusters[n.cluster] || {};
+    const note = why === "cluster" ? `cluster: ${esc(c.name)}` : why === "description" ? `described as: ${esc(c.name)}` : esc(n.file || "external");
+    return `<div class="result" data-node="${i}"><b>${esc(n.label)}</b> <span class="why">${KIND_LABEL[n.kind]} ${n.line ? ":" + n.line : ""}</span><div class="why">${note}</div></div>`;
+  }).join("") + (results.length > 60 ? `<div class="result why">${results.length - 60} more highlighted in the graph</div>` : "");
+  box.classList.toggle("open", query.trim().length > 0);
+  if (query.trim() && !results.length) box.innerHTML = `<div class="result why">No matches</div>`;
+  refreshColors();
+  markExplorerHits();
+}
+$("results").addEventListener("click", (e) => { const r = e.target.closest("[data-node]"); if (r) select(+r.dataset.node); });
+
+/* Selection: details panel plus the node's own neighbourhood graph */
+function neighbourhood(i, depth) {
+  const keep = new Set([i]);
+  let frontier = [i];
+  for (let d = 0; d < depth; d++) {
+    const next = [];
+    frontier.forEach((x) => adjacency[x].forEach(([y]) => { if (!keep.has(y) && keep.size < 600) { keep.add(y); next.push(y); } }));
+    frontier = next;
+  }
+  return keep;
+}
+/* Radial layout, no physics: the node in the centre, direct neighbours on the
+   inner ring grouped by relation, 2-hop neighbours on an outer ring next to the
+   neighbour that reaches them. */
+function radialPositions(i, keep) {
+  const positions = { [i]: { x: 0, y: 0 } };
+  const ring1 = adjacency[i].filter(([j]) => keep.has(j) && j !== i)
+    .sort((a, b) => a[1] - b[1] || nodes[a[0]].label.localeCompare(nodes[b[0]].label))
+    .map(([j]) => j).filter((j, k, all) => all.indexOf(j) === k);
+  const r1 = Math.max(160, ring1.length * 9);
+  const angleOf = {};
+  ring1.forEach((j, k) => {
+    const a = (2 * Math.PI * k) / ring1.length;
+    angleOf[j] = a;
+    positions[j] = { x: r1 * Math.cos(a), y: r1 * Math.sin(a) };
+  });
+  const ring2 = [...keep].filter((j) => positions[j] === undefined);
+  const parentAngle = (j) => {
+    const via = adjacency[j].find(([p]) => angleOf[p] !== undefined);
+    return via ? angleOf[via[0]] : 0;
+  };
+  ring2.sort((a, b) => parentAngle(a) - parentAngle(b));
+  const r2 = Math.max(r1 + 220, ring2.length * 7);
+  ring2.forEach((j, k) => {
+    const a = (2 * Math.PI * k) / Math.max(1, ring2.length);
+    positions[j] = { x: r2 * Math.cos(a), y: r2 * Math.sin(a) };
+  });
+  return positions;
+}
+function showFocus(i) {
+  freezeFullLayout();
+  const keep = neighbourhood(i, +$("depth").value);
+  const edgeIds = new Set();
+  keep.forEach((x) => adjacency[x].forEach(([y, , , e]) => { if (keep.has(y)) edgeIds.add(e); }));
+  const positions = radialPositions(i, keep);
+  focusId = i;
+  network.setOptions({ physics: false, edges: { arrows: { to: { enabled: true, scaleFactor: 0.35 } } } });
+  nodeSet.clear(); edgeSet.clear();
+  nodeSet.add([...keep].map((x) => Object.assign(visNode(x), { hidden: false, x: positions[x].x, y: positions[x].y },
+    x === i ? { font: { size: 14, color: css("--text") } } : {})));
+  edgeSet.add([...edgeIds].map((e) => visEdge(e)));
+  network.fit({ animation: { duration: 400 } });
+  network.selectNodes([i]);
+  $("back").hidden = false; $("depth").hidden = false;
+  setStatus();
+}
+function showFull() {
+  focusId = null;
+  nodeSet.clear(); edgeSet.clear();
+  nodeSet.add(nodes.map((_, i) => Object.assign(visNode(i), fullPositions ? fullPositions[i] : {})));
+  edgeSet.add(D.edges.map((_, i) => visEdge(i)));
+  network.setOptions({ physics: false, edges: { arrows: { to: { enabled: false } } } });
+  network.fit({ animation: true });
+  $("back").hidden = true; $("depth").hidden = true;
+  setStatus();
+}
+$("back").onclick = showFull;
+$("depth").onchange = () => { if (focusId !== null) showFocus(focusId); };
+$("colorBy").onchange = (e) => { colorBy = e.target.value; refreshColors(); };
+
+function select(i) {
+  const n = nodes[i], c = clusters[n.cluster] || {};
+  const grouped = {};
+  adjacency[i].forEach(([j, r, dir]) => { (grouped[(dir === "out" ? "" : "used by: ") + D.relations[r]] = grouped[(dir === "out" ? "" : "used by: ") + D.relations[r]] || []).push(j); });
+  const location = n.file ? `${D.target}/${n.file}${n.line ? ":" + n.line : ""}` : "";
+  $("detail").innerHTML = `
+    <button class="close" id="closeDetail">Close</button>
+    <h2>${esc(n.label)}</h2>
+    <div class="meta">${KIND_LABEL[n.kind]} | ${n.category}</div>
+    ${n.file ? `<h3>Source</h3><code>${esc(n.file)}${n.line ? ":" + n.line : ""}</code><div style="margin-top:6px"><button id="copyZed">Copy zed command</button></div>` : "<h3>Source</h3>External dependency"}
+    <h3>Cluster</h3><div><b>${esc(c.name || "")}</b> <span class="k">(${c.size || 0} nodes, ${esc(c.category || "")})</span></div>
+    ${c.description ? `<div class="meta">${esc(c.description)}</div>` : ""}
+    ${n.doc ? `<h3>Docstring</h3><div>${esc(n.doc)}</div>` : ""}
+    ${Object.keys(grouped).sort().map((rel) => `<h3>${esc(rel)} (${grouped[rel].length})</h3>` +
+      grouped[rel].slice(0, 40).map((j) => `<div class="nb" data-node="${j}">${esc(nodes[j].label)} <span class="k">${esc(nodes[j].file)}</span></div>`).join("") +
+      (grouped[rel].length > 40 ? `<div class="k">${grouped[rel].length - 40} more</div>` : "")).join("")}`;
+  $("app").classList.remove("no-detail");
+  $("closeDetail").onclick = () => $("app").classList.add("no-detail");
+  const copy = $("copyZed");
+  if (copy) copy.onclick = () => { navigator.clipboard.writeText(`zed "${location}"`); copy.textContent = "Copied"; };
+  $("detail").querySelectorAll(".nb").forEach((el) => (el.onclick = () => select(+el.dataset.node)));
+  document.querySelectorAll(".result.active").forEach((x) => x.classList.remove("active"));
+  const resultRow = document.querySelector(`.result[data-node="${i}"]`);
+  if (resultRow) resultRow.classList.add("active");
+  revealInExplorer(i);
+  showFocus(i);
+}
+
+$("title").textContent = D.project;
+document.title = D.project + " - Code Graph";
+setStatus();
+</script>
+</body>
+</html>
